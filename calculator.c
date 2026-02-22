@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <time.h>
 
 typedef enum {
 	PLUS,
@@ -28,11 +29,26 @@ typedef struct {
 } Tokens;
 Tokens tokens = {0};
 
+void free_tokens(Tokens *ts) {
+    if (ts->items != NULL) {
+        free(ts->items);
+    }
+    ts->items = NULL;
+    ts->count = 0;
+    ts->capacity = 0;
+    ts->pos = 0; 
+}
+
 typedef struct program {
 	char *string;
 	int pos;
 } program;
 program p;
+
+void reset_program(program *prog, char *input) {
+    prog->string = input;
+    prog->pos = 0;
+}
 
 // typedef struct {
 // 	Tokens tokens;
@@ -182,6 +198,7 @@ typedef enum {
 
 typedef struct Expression Expression;
 
+
 typedef struct {
 	Expression *left;
 	Token operator;
@@ -205,6 +222,23 @@ struct Expression {
 		LiteralExpr literalexpr;
 	} as;
 };
+
+void free_expression(Expression *expr) {
+    if (expr == NULL) return;
+
+    switch (expr->type) {
+        case BINARY_EXPR:
+            free_expression(expr->as.binaryexpr.left);
+            free_expression(expr->as.binaryexpr.right);
+            break;
+        case UNARY_EXPR:
+            free_expression(expr->as.unaryexpr.right);
+            break;
+        case LITERAL_EXPR:
+            break;
+    }
+    free(expr);
+}
 
 Expression* create_binary_expr(Expression* left, Token op, Expression *right) {
 	Expression *expr = malloc(sizeof(Expression));
@@ -305,7 +339,7 @@ Expression* unary() {
 Expression* factor() {
 	Expression* expr = unary();
 	
-	while (match(SLASH) | match(STAR)) {
+	while (match(SLASH) || match(STAR)) {
 		Token op = previous();
 		Expression *right = unary();
 		expr = create_binary_expr(expr, op, right);
@@ -316,7 +350,7 @@ Expression* factor() {
 Expression* term() {
 	Expression* expr = factor();
 	// match +/- tokens
-	while (match(MINUS) | match(PLUS)) {
+	while (match(MINUS) || match(PLUS)) {
 		Token op = previous();
 		Expression* right = factor(); 
 		expr = create_binary_expr(expr, op, right);	
@@ -325,6 +359,7 @@ Expression* term() {
 }
 
 bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
+	if (expr==NULL)  return false ;
 	if (strlen(buf) >= buf_size - 1) {
 		fprintf(stderr, "Buffer overflow AST_printer()");
 		return false;
@@ -354,27 +389,30 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 }
 
 Expression* parse() {
-	return term();
+	 return term();
 }
 
+
 int main() {
-	char line[256];
-	// int i;
-	if (fgets(line, sizeof(line), stdin)) {
-		p.pos = 0;
-		p.string=line;
-		 // Token token;
-		 // token.operator='+';
-	  tokenize(&tokens);
-		//Expression *expr = parse();
-		printf("tokens capacity %lu\n", tokens.capacity);
-		printf("tokens count %lu\n", tokens.count);
-		print_tokens(tokens);
-		printf("\n");
-		char buf[256] = "AST\n";
-		Expression *expr = parse();
-		printf("%d",expr->type);
-		AST_printer(expr, buf, 256);
-		printf("%s\n",buf);
-	}
+    char line[256];
+    while (1) {
+        printf("Calc > "); 
+        if (fgets(line, sizeof(line), stdin)) {
+            reset_program(&p, line);
+            free_tokens(&tokens); 
+
+            tokenize(&tokens);
+
+            Expression *expr = parse();
+            
+            if (expr != NULL) {
+                char buf[1024] = ""; 
+                AST_printer(expr, buf, sizeof(buf));
+                printf("AST: %s\n", buf);
+
+                free_expression(expr);
+            } 
+        }
+    }
+    return 0;
 }
