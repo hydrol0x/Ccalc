@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -393,6 +394,64 @@ Expression* parse() {
 }
 
 
+
+typedef struct {
+	bool status;
+	int result;
+} EvalResult; 
+
+EvalResult eval(Expression *expr) {
+	if (expr == NULL) return (EvalResult) {false, 0};
+	switch (expr->type) {
+		case BINARY_EXPR: ;
+			EvalResult lhs_r = eval(expr->as.binaryexpr.left);
+			EvalResult rhs_r = eval(expr->as.binaryexpr.right);
+			if (!lhs_r.status || !rhs_r.status) return lhs_r;
+			int lhs = lhs_r.result;
+			int rhs = rhs_r.result;
+			int out;
+			switch (expr->as.binaryexpr.operator.type) {
+				case PLUS:
+					out = lhs+rhs;
+					break;
+				case MINUS:
+					out = lhs-rhs;
+					break;
+				case SLASH:
+					if (rhs==0) {
+						error(expr->as.binaryexpr.operator, "Division by 0");
+					}
+					out = lhs/rhs;
+					break;
+				case STAR:
+					out = lhs*rhs;
+					break;
+				default:
+					fprintf(stderr, "Not an operator.");
+					return (EvalResult){false,0};
+			}
+			return (EvalResult){true, out};
+		case UNARY_EXPR: ;
+			EvalResult right_r = eval(expr->as.unaryexpr.right);
+			int right = right_r.result;
+			switch (expr->as.unaryexpr.operator.type) {
+				case MINUS:
+					out = -right;
+					break;
+				default:
+					fprintf(stderr, "Not a valid unary operator.");
+					return (EvalResult){false,0};
+			}
+			return (EvalResult){true,out};
+			break;
+		case LITERAL_EXPR:
+			return (EvalResult){true,expr->as.literalexpr.value.as.integer};	
+		default:
+				fprintf(stderr,"Unhandled token type in eval");
+				return (EvalResult){false,0};
+	}
+}
+
 int main() {
     char line[256];
     while (1) {
@@ -408,7 +467,14 @@ int main() {
             if (expr != NULL) {
                 char buf[1024] = ""; 
                 AST_printer(expr, buf, sizeof(buf));
-                printf("AST: %s\n", buf);
+								EvalResult result = eval(expr);
+                // printf("AST: %s\n", buf);
+								if (!result.status) {
+									fprintf(stderr, "Error in eval");
+									continue;
+								}
+                printf("%d\n", result.result);
+                //printf("%d\n", result.result);
 
                 free_expression(expr);
             } 
