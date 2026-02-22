@@ -128,6 +128,27 @@ void tokenize(Tokens *output){
 	vec_append((*output), end);
 }
 
+bool token_to_str(Token token, char* str) {
+	switch (token.type) {
+		case PLUS:
+		case MINUS:
+		case STAR:
+		case SLASH:
+			str[0] = token.as.operator; 
+			return true;
+		case INTEGER:
+			printf("%d", token.as.integer);
+			str[0] = token.as.integer+'0'; 
+			return true;
+		case ENDSTREAM:
+		  str[0]='#';
+			return true;
+		default:
+			fprintf(stderr,"Unhandled token type in token_to_str");
+			return false;
+	}
+}
+
 void print_token(Token token) {
 	switch (token.type) {
 		case PLUS:
@@ -298,9 +319,38 @@ Expression* term() {
 	while (match(MINUS) | match(PLUS)) {
 		Token op = previous();
 		Expression* right = factor(); 
-		create_binary_expr(expr, op, right);	
+		expr = create_binary_expr(expr, op, right);	
 	}
 	return expr;
+}
+
+bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
+	if (strlen(buf) >= buf_size - 1) {
+		fprintf(stderr, "Buffer overflow AST_printer()");
+		return false;
+	}
+	switch (expr->type) {
+		case BINARY_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"Binary(");
+			AST_printer(expr->as.binaryexpr.left, buf, buf_size);
+			snprintf(buf + strlen(buf),buf_size-strlen(buf)," ,'%c', ",expr->as.binaryexpr.operator.as.operator);
+			AST_printer(expr->as.binaryexpr.right, buf, buf_size);
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
+			return true;
+			break;
+		case UNARY_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"Unary('%c', ",expr->as.unaryexpr.operator.as.operator);
+			AST_printer(expr->as.unaryexpr.right, buf, buf_size);
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
+			return true;
+			break;
+		case LITERAL_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",expr->as.literalexpr.value.as.integer);
+			return true;
+		default:
+				fprintf(stderr,"Unhandled token type in AST_printer");
+				return false;
+	}
 }
 
 Expression* parse() {
@@ -317,10 +367,14 @@ int main() {
 		 // token.operator='+';
 	  tokenize(&tokens);
 		//Expression *expr = parse();
-		parse();
 		printf("tokens capacity %lu\n", tokens.capacity);
 		printf("tokens count %lu\n", tokens.count);
 		print_tokens(tokens);
 		printf("\n");
+		char buf[256] = "AST\n";
+		Expression *expr = parse();
+		printf("%d",expr->type);
+		AST_printer(expr, buf, 256);
+		printf("%s\n",buf);
 	}
 }
