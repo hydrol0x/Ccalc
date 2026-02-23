@@ -2,7 +2,7 @@ CC      = gcc
 TARGET  = calculator
 C_FILES = $(wildcard *.c)
 OBJS    = $(patsubst %.c,%.o,$(C_FILES))
-CFLAGS  = -g -Wall -Werror -pedantic-errors
+CFLAGS  = -g -Wall -Werror -pedantic-errors -g
 LDFLAGS =
 LDLIBS  =
 

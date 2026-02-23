@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -17,6 +16,12 @@ typedef enum {
 	INTEGER,
 	ENDSTREAM,
 } TokenType;
+
+typedef enum {
+	SUCCESS,
+	PARSE_ERR,
+	CREATE_EXPR_ERR,
+} Error;
 
 typedef struct {
 	TokenType type;
@@ -247,7 +252,7 @@ struct Expression {
 	} as;
 };
 
-Expression* expr(); 
+//ExpressionResult expr(); 
 
 void free_expression(Expression *expr) {
     if (expr == NULL) return;
@@ -269,55 +274,60 @@ void free_expression(Expression *expr) {
     free(expr);
 }
 
-Expression* create_paren_expr(Expression* middle) {
+typedef struct {
+	Error error;
+	Expression *expr;
+} ExpressionResult;
+
+ExpressionResult create_paren_expr(Expression* middle) {
 	Expression *expr = malloc(sizeof(Expression));
 	if (expr == NULL) {
-		fprintf(stderr, "Failed to create paren expression.");
-		exit(1);
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
 	}
 
 	expr->type=PAREN_EXPR;
 	expr->as.parenexpr.expr = middle;
 
-	return expr;
+	return (ExpressionResult){SUCCESS, expr};
 }
 
-Expression* create_binary_expr(Expression* left, Token op, Expression *right) {
+ExpressionResult create_binary_expr(Expression* left, Token op, Expression *right) {
 	Expression *expr = malloc(sizeof(Expression));
 
 	if (expr == NULL) {
-		fprintf(stderr, "Failed to create binary expression.");
-		exit(1);
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
 	}
 
 	expr->type=BINARY_EXPR;
 	expr->as.binaryexpr.left=left;
 	expr->as.binaryexpr.right=right;
 	expr->as.binaryexpr.operator=op;
-	return expr;
+	return (ExpressionResult){SUCCESS, expr};
 }
 
-Expression* create_literal_expr(Token value) {
+ExpressionResult create_literal_expr(Token value) {
 	Expression *expr = malloc(sizeof(Expression));
+	if (expr == NULL) {
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+	}
 
 	expr->type = LITERAL_EXPR;
 	expr->as.literalexpr.value = value;
 
-	return expr;
+	return (ExpressionResult){SUCCESS, expr};
 }
 
-Expression* create_unary_expr(Token op,Expression* right) {
+ExpressionResult create_unary_expr(Token op,Expression* right) {
 	Expression *expr = malloc(sizeof(Expression));
 
 	if (expr == NULL) {
-		fprintf(stderr, "Failed to create unary expression.");
-		exit(1);
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
 	}
 
 	expr->type=UNARY_EXPR;
 	expr->as.unaryexpr.right=right;
 	expr->as.unaryexpr.operator=op;
-	return expr;
+	return (ExpressionResult){SUCCESS, expr};
 }
 
 Token peekTokens() {
@@ -350,60 +360,92 @@ Token previous() {
 }
 
 void error(Token token, char *message) {
-	printf("[Error] token: ");	
+	printf("[Error] at token '");	
 	// TODO: use tostring fn for token
 	print_token(token);
-	printf(" ");	
+	printf("', ");	
 	printf("%s\n", message);	
 }
 
-void consume_token(TokenType type, char *message) {
-	if (check(type)) {advanceTokens(); return;};
+bool consume_token(TokenType type, char *message) {
+	if (check(type)) {advanceTokens(); return true;};
 	error(peekTokens(), message);
-}
-Expression* primary() {
-	if (match(INTEGER)) {
-		return create_literal_expr(previous());
-	}
-
-	if (match(LPAREN)) {
-		Expression *expression = expr();	
-		consume_token(RPAREN, "Expect closing ')'.");
-		return expression;	
-	}
-	error(peekTokens(),"Expected expression.");
-	return NULL;
+	return false;
 }
 
-Expression* unary() {
-	if (match(MINUS)) {
-		Token op = previous();
-		Expression *right = unary();
-		return create_unary_expr(op, right);
-	}
-	return primary();
+ExpressionResult expr(); 
+
+ExpressionResult primary() {
+ if (match(INTEGER)) {
+	 ExpressionResult res = create_literal_expr(previous());
+	 return res;
+ }
+
+ if (match(LPAREN)) {
+	 ExpressionResult res = expr();
+	 if (!consume_token(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+
+	 return res;
+ }
+
+ error(peekTokens(),"Expected expression.");
+ return (ExpressionResult){PARSE_ERR, NULL};
 }
 
-Expression* factor() {
-	Expression* expr = unary();
-	
-	while (match(SLASH) || match(STAR)) {
-		Token op = previous();
-		Expression *right = unary();
-		expr = create_binary_expr(expr, op, right);
-	}
-	return expr;
+ExpressionResult unary() {
+ if (match(MINUS)) {
+	 Token op = previous();
+	 ExpressionResult res = unary();
+ if (res.error!=SUCCESS) {
+  return res;
+ }
+
+ return create_unary_expr(op, res.expr);
+ }
+ return primary();
 }
 
-Expression* term() {
-	Expression* expr = factor();
-	// match +/- tokens
-	while (match(MINUS) || match(PLUS)) {
-		Token op = previous();
-		Expression* right = factor(); 
-		expr = create_binary_expr(expr, op, right);	
-	}
-	return expr;
+ExpressionResult factor() {
+ ExpressionResult res = unary();
+ if (res.error != SUCCESS) return res;
+
+ while (match(SLASH) || match(STAR)) {
+	 Token op = previous();
+	 ExpressionResult right = unary();
+ if (right.error != SUCCESS) {
+		free_expression(res.expr); 
+		return right;
+ }
+
+ res = create_binary_expr(res.expr, op, right.expr);
+ }
+
+ return res;
+}
+
+ExpressionResult term() {
+ ExpressionResult res = factor();
+ if (res.error != SUCCESS) return res;
+
+ while (match(MINUS) || match(PLUS)) {
+	 Token op = previous();
+	 ExpressionResult right = factor();
+ if (right.error != SUCCESS) {
+		free_expression(res.expr); 
+		return right;
+ }
+
+ res = create_binary_expr(res.expr, op, right.expr);
+ }
+
+ return res;
+}
+
+ExpressionResult expr() {
+ return term();
+}
+ExpressionResult parse() {
+return expr();
 }
 
 bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
@@ -436,15 +478,6 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 	}
 }
 
-Expression* expr() {
-	return term();
-}
-Expression* parse() {
-	 return expr();
-}
-
-
-
 typedef struct {
 	bool status;
 	int result;
@@ -470,6 +503,7 @@ EvalResult eval(Expression *expr) {
 				case SLASH:
 					if (rhs==0) {
 						error(expr->as.binaryexpr.operator, "Division by 0");
+						return (EvalResult){false,0};
 					}
 					out = lhs/rhs;
 					break;
@@ -509,25 +543,35 @@ int main() {
         if (fgets(line, sizeof(line), stdin)) {
             reset_program(&p, line);
             free_tokens(&tokens); 
-
             tokenize(&tokens);
 
-            Expression *expr = parse();
+            ExpressionResult res = parse();
             
-            if (expr != NULL) {
-                char buf[1024] = ""; 
-                AST_printer(expr, buf, sizeof(buf));
-								EvalResult result = eval(expr);
-                // printf("AST: %s\n", buf);
-								if (!result.status) {
-									fprintf(stderr, "Error in eval");
-									continue;
-								}
-                printf("%d\n", result.result);
-                //printf("%d\n", result.result);
+						switch (res.error) {
+								case SUCCESS: ;
+										if (res.expr==NULL) {
+											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.");
+											continue; // should not be possible
+										}
+					
+										Expression *expr = res.expr;
+										char buf[1024] = ""; 
+										AST_printer(expr, buf, sizeof(buf));
+										EvalResult result = eval(expr);
 
-                free_expression(expr);
-            } 
+										if (!result.status) {
+											continue;
+										}
+
+										printf("%d\n", result.result);
+										free_expression(expr);
+										break;	
+								case CREATE_EXPR_ERR:
+										fprintf(stderr,"An unexpected error occured (CREATE_EXPR_ERR)");
+										break;
+								case PARSE_ERR:
+										continue;
+						}
         }
     }
     return 0;
