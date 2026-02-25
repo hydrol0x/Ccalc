@@ -103,7 +103,7 @@ int ctod(char character) {
 	return character - '0';
 }
 
-void tokenize(Tokens *output){
+bool tokenize(Tokens *output){
 	char current;
 	while ((current = peek())) {
 		if (isspace(current)) {
@@ -146,8 +146,8 @@ void tokenize(Tokens *output){
 						token.type=RPAREN;
 						break;
 				default:
-					printf("Error: expected [+, -, *, /] found '%c'", current);
-					return;
+					printf("[Error] Unknown input '%c'\n", current);
+					return false;
 			}
 			token.as.operator=current;
 			vec_append((*output), token);
@@ -157,6 +157,7 @@ void tokenize(Tokens *output){
 	Token end;
 	end.type = ENDSTREAM;
 	vec_append((*output), end);
+	return true;
 }
 
 bool token_to_str(Token token, char* str) {
@@ -489,7 +490,7 @@ EvalResult eval(Expression *expr) {
 		case BINARY_EXPR: ;
 			EvalResult lhs_r = eval(expr->as.binaryexpr.left);
 			EvalResult rhs_r = eval(expr->as.binaryexpr.right);
-			if (!lhs_r.status || !rhs_r.status) return lhs_r;
+			if (!lhs_r.status || !rhs_r.status) return (EvalResult){false, 0};
 			int lhs = lhs_r.result;
 			int rhs = rhs_r.result;
 			int out;
@@ -543,7 +544,9 @@ int main() {
         if (fgets(line, sizeof(line), stdin)) {
             reset_program(&p, line);
             free_tokens(&tokens); 
-            tokenize(&tokens);
+            if (!tokenize(&tokens)) {
+							continue;
+						}
 
             ExpressionResult res = parse();
             
