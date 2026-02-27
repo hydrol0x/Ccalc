@@ -5,6 +5,17 @@
 #include <stdbool.h>
 #include <time.h>
 
+typedef struct {
+	const char* start;
+	int length;
+} Sv; 
+//stringview
+
+typedef struct {
+	size_t count;
+	size_t capacity;
+	char   *items;	
+} String;
 
 typedef enum {
 	PLUS,
@@ -14,6 +25,7 @@ typedef enum {
 	LPAREN,
 	RPAREN,
 	INTEGER,
+	IDENTIFIER,
 	ENDSTREAM,
 } TokenType;
 
@@ -27,6 +39,7 @@ typedef struct {
 	TokenType type;
 	union { char operator;
 					int  integer; 
+					char *identifier;
 	} as;
 } Token;
 
@@ -84,10 +97,11 @@ void advance() {
 	p.pos++;
 }
 
+#define INIT_CAPACITY 8
 #define vec_append(xs, x)\
 	do {\
 		if ((xs).count >= (xs).capacity) {\
-			if ((xs).capacity == 0) (xs).capacity = 256;\
+			if ((xs).capacity == 0) (xs).capacity = INIT_CAPACITY;\
 			else (xs).capacity *= 2;\
 			(xs).items = realloc((xs).items, (xs).capacity*sizeof(*(xs).items));\
 			if ((xs).items==NULL) {\
@@ -103,6 +117,18 @@ int ctod(char character) {
 	return character - '0';
 }
 
+bool is_op(char c) {
+	switch (c) {
+		case '+':
+		case '-':
+		case '/':
+		case '*':
+			return true;
+		default:
+			return false;
+	}
+}
+
 bool tokenize(Tokens *output){
 	char current;
 	while ((current = peek())) {
@@ -113,17 +139,39 @@ bool tokenize(Tokens *output){
 		else if (isdigit(current)) {
 			char digit_c;
 			int integer=0;
-			while (isdigit(digit_c=peek())) {
-				integer*=10;
-				integer+=ctod(digit_c);
-				advance();
+			while (!isspace(digit_c=peek())) {
+				if (isdigit(digit_c)) {
+						integer*=10;
+						integer+=ctod(digit_c);
+						advance();
+						continue;
+				} else if (is_op(digit_c)) {
+						break;
+				} else {
+					printf("[Error] Invalid decimal input, expected digit found '%c'\n", digit_c);
+					return false;
+				}
 			}
 			Token token;
 			token.type=INTEGER;
 			token.as.integer=integer;
 			vec_append((*output), token);
 			continue;
-		} 
+		}
+		else if (isalpha(current)) { 
+			char id_c; 
+			String identifier = {0};
+			int i = 0;
+			while ((isalnum(id_c=peek())) && i<sizeof(identifier)-1) {
+				vec_append(identifier, id_c);	
+				advance();
+			}
+			vec_append(identifier, '\0');
+
+			Token token = {.type = IDENTIFIER, .as.identifier = identifier.items};
+			vec_append((*output), token);
+			continue;
+		}
 		else {
 			Token token;
 			switch (current) {
@@ -201,8 +249,11 @@ void print_token(Token token) {
 		case RPAREN:
 			printf(")");
 			break;
+		case IDENTIFIER:
+			printf("%s", token.as.identifier);
+			break;
 		default:
-			fprintf(stderr,"Unhandled token type in print_token");
+			fprintf(stderr,"Unhandled token type in print_token\n");
 	}
 }
 
@@ -566,7 +617,7 @@ int main() {
 											continue;
 										}
 
-										printf("%d\n", result.result);
+										printf("AST: %s\n%d\n", buf,result.result);
 										free_expression(expr);
 										break;	
 								case CREATE_EXPR_ERR:
