@@ -573,18 +573,26 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 			AST_printer(expr->as.binaryexpr.right, buf, buf_size);
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
 			return true;
-			break;
 		case UNARY_EXPR:
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),"Unary('%c', ",expr->as.unaryexpr.operator.as.operator);
 			AST_printer(expr->as.unaryexpr.right, buf, buf_size);
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
 			return true;
-			break;
 		case LITERAL_EXPR:
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",expr->as.literalexpr.value.as.integer);
 			return true;
+		case CALL_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%s(",expr->as.callexpr.identifier.as.identifier);
+			size_t i;
+			size_t n_args = expr->as.callexpr.n_args;
+			for (i=0; i<n_args; i++) {
+				AST_printer(expr->as.callexpr.args[i], buf, buf_size);
+				if (i!=n_args-1) snprintf(buf + strlen(buf),buf_size-strlen(buf),",");
+			}
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
+			return true;
 		default:
-				fprintf(stderr,"Unhandled token type in AST_printer\n");
+				fprintf(stderr,"Unhandled token type in AST_printer; Enum: %d\n", expr->type);
 				return false;
 	}
 }
@@ -659,32 +667,32 @@ int main() {
 						}
 
             ExpressionResult res = parse();
-            
-						switch (res.error) {
-								case SUCCESS: ;
-										if (res.expr==NULL) {
-											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.");
-											continue; // should not be possible
-										}
-					
-										Expression *expr = res.expr;
-										char buf[1024] = ""; 
-										AST_printer(expr, buf, sizeof(buf));
-										EvalResult result = eval(expr);
+			  switch (res.error) {
+				case SUCCESS: ;
+				  if (res.expr==NULL) {
+					  fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.");
+					  continue; // should not be possible
+				  }
 
-										if (!result.status) {
-											continue;
-										}
+				  Expression *expr = res.expr;
+				  char buf[1024] = ""; 
+				  AST_printer(expr, buf, sizeof(buf));
+				  printf("AST: %s\n", buf);
+				  EvalResult result = eval(expr);
 
-										printf("AST: %s\n%d\n", buf,result.result);
-										free_expression(expr);
-										break;	
-								case CREATE_EXPR_ERR:
-										fprintf(stderr,"An unexpected error occured (CREATE_EXPR_ERR)");
-										break;
-								case PARSE_ERR:
-										continue;
-						}
+				  if (!result.status) {
+					  continue;
+				  }
+
+				  printf("%d\n", result.result);
+				  free_expression(expr);
+				  break;	
+				case CREATE_EXPR_ERR:
+				  fprintf(stderr,"An unexpected error occured (CREATE_EXPR_ERR)");
+				  break;
+				case PARSE_ERR:
+				  continue;
+			  }
         }
     }
     return 0;
