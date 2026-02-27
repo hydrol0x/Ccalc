@@ -428,20 +428,30 @@ bool consume_token(TokenType type, char *message) {
 ExpressionResult expr(); 
 
 ExpressionResult primary() {
- if (match(INTEGER)) {
-	 ExpressionResult res = create_literal_expr(previous());
-	 return res;
- }
+  if (match(INTEGER)) {
+	  ExpressionResult res = create_literal_expr(previous());
+	  return res;
+  }
 
- if (match(LPAREN)) {
-	 ExpressionResult res = expr();
-	 if (!consume_token(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+  if (match(LPAREN)) {
+	  ExpressionResult res = expr();
+	  if (!consume_token(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
 
-	 return res;
- }
+	  return res;
+  }
 
- error(peekTokens(),"Expected expression.");
- return (ExpressionResult){PARSE_ERR, NULL};
+  if (match(IDENTIFIER)) {
+	  Token identifier = previous();
+	  if (match(LPAREN)) {
+		// function call
+		printf("function call, %s\n", identifier.as.identifier);
+		if (!consume_token(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
+		return (ExpressionResult){SUCCESS, NULL}; // TODO: this is a dummy, it should evaluate the function & return result as literal
+	  }
+  }
+
+  error(peekTokens(),"Expected expression.");
+  return (ExpressionResult){PARSE_ERR, NULL};
 }
 
 ExpressionResult unary() {
@@ -604,7 +614,7 @@ int main() {
 						switch (res.error) {
 								case SUCCESS: ;
 										if (res.expr==NULL) {
-											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.");
+											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.\n");
 											continue; // should not be possible
 										}
 					
