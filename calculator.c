@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
-#include <time.h>
 
 typedef struct {
 	const char* start;
@@ -26,6 +25,7 @@ typedef enum {
 	RPAREN,
 	INTEGER,
 	IDENTIFIER,
+	COMMA,
 	ENDSTREAM,
 } TokenType;
 
@@ -145,7 +145,7 @@ bool tokenize(Tokens *output){
 						integer+=ctod(digit_c);
 						advance();
 						continue;
-				} else if (is_op(digit_c)) {
+				} else if (is_op(digit_c) || digit_c==')' || digit_c==',') {
 						break;
 				} else {
 					printf("[Error] Invalid decimal input, expected digit found '%c'\n", digit_c);
@@ -192,6 +192,9 @@ bool tokenize(Tokens *output){
 						break;
 				case ')':
 						token.type=RPAREN;
+						break;
+				case ',':
+						token.type=COMMA;
 						break;
 				default:
 					printf("[Error] Unknown input '%c'\n", current);
@@ -268,10 +271,17 @@ typedef enum {
 	UNARY_EXPR,
 	LITERAL_EXPR,
 	PAREN_EXPR,
+	CALL_EXPR,
 } ExpressionType;
 
 typedef struct Expression Expression;
 
+typedef struct {
+	size_t pos;
+	size_t count;
+	size_t capacity;
+	Expression **items;
+} Expressions; // used for dynamic amount of expressions e.g in fn args
 
 typedef struct {
 	Expression *left;
@@ -292,7 +302,11 @@ typedef struct {
 	Expression *expr;
 } ParenExpr;
 
-
+typedef struct {
+  Token identifier;
+  Expression **args; 
+  size_t n_args;
+} CallExpr;
 
 struct Expression {
 	ExpressionType type;
@@ -301,6 +315,7 @@ struct Expression {
 		UnaryExpr unaryexpr;
 		LiteralExpr literalexpr;
 		ParenExpr parenexpr;
+		CallExpr callexpr;
 	} as;
 };
 
@@ -319,9 +334,15 @@ void free_expression(Expression *expr) {
             break;
         case LITERAL_EXPR:
             break;
-				case PAREN_EXPR:
-						free_expression(expr->as.parenexpr.expr);
-						break;
+		case PAREN_EXPR:
+			free_expression(expr->as.parenexpr.expr);
+			break;
+		case CALL_EXPR: ;
+			size_t n_args = expr->as.callexpr.n_args;
+			for (size_t i=0; i<n_args; i++) {
+				free_expression(expr->as.callexpr.args[i]);
+			}
+			free(expr->as.callexpr.identifier.as.identifier);
     }
     free(expr);
 }
@@ -379,6 +400,20 @@ ExpressionResult create_unary_expr(Token op,Expression* right) {
 	expr->type=UNARY_EXPR;
 	expr->as.unaryexpr.right=right;
 	expr->as.unaryexpr.operator=op;
+	return (ExpressionResult){SUCCESS, expr};
+}
+
+ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_args) {
+	Expression *expr = malloc(sizeof(Expression));
+
+	if (expr == NULL) {
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+	}
+
+	expr->type=CALL_EXPR;
+	expr->as.callexpr.args=args; 
+	expr->as.callexpr.n_args=n_args;
+	expr->as.callexpr.identifier=identifier;
 	return (ExpressionResult){SUCCESS, expr};
 }
 
@@ -445,8 +480,22 @@ ExpressionResult primary() {
 	  if (match(LPAREN)) {
 		// function call
 		printf("function call, %s\n", identifier.as.identifier);
+		if (match(RPAREN)) {
+		  printf("fn empty\n");
+		  // empty function args
+		  return create_call_expr(identifier, NULL, 0);
+		}
+
+		Expressions args = {0};
+		do {
+		  ExpressionResult res = expr();
+		  if (res.error!=SUCCESS) return res; // if one of the args fails then we stop parsing
+		  vec_append(args, res.expr); 
+		} while (match(COMMA));
+
 		if (!consume_token(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
-		return (ExpressionResult){SUCCESS, NULL}; // TODO: this is a dummy, it should evaluate the function & return result as literal
+
+		return create_call_expr(identifier, args.items, args.count);
 	  }
   }
 
@@ -535,7 +584,7 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",expr->as.literalexpr.value.as.integer);
 			return true;
 		default:
-				fprintf(stderr,"Unhandled token type in AST_printer");
+				fprintf(stderr,"Unhandled token type in AST_printer\n");
 				return false;
 	}
 }
@@ -593,7 +642,7 @@ EvalResult eval(Expression *expr) {
 		case LITERAL_EXPR:
 			return (EvalResult){true,expr->as.literalexpr.value.as.integer};	
 		default:
-				fprintf(stderr,"Unhandled token type in eval");
+				fprintf(stderr,"Unhandled token type in eval\n");
 				return (EvalResult){false,0};
 	}
 }
@@ -614,7 +663,7 @@ int main() {
 						switch (res.error) {
 								case SUCCESS: ;
 										if (res.expr==NULL) {
-											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.\n");
+											fprintf(stderr, "Unreachable: res.expr==NULL but res.error=SUCCESS.");
 											continue; // should not be possible
 										}
 					
