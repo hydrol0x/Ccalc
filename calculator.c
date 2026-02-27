@@ -1,8 +1,10 @@
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
+//#include "hashmap.h"
 
 typedef struct {
 	const char* start;
@@ -60,6 +62,12 @@ void free_tokens(Tokens *ts) {
     ts->capacity = 0;
     ts->pos = 0; 
 }
+
+// uint64_t user_hash(const void *item, uint64_t seed0, uint64_t seed1) {
+//     const struct user *user = item;
+//     return hashmap_sip(user->name, strlen(user->name), seed0, seed1);
+// }
+// struct hashmap *map = hashmap_new(sizeof(char *), 0, 0, 0, ,)
 
 typedef struct program {
 	char *string;
@@ -479,7 +487,6 @@ ExpressionResult primary() {
 	  Token identifier = previous();
 	  if (match(LPAREN)) {
 		// function call
-		printf("function call, %s\n", identifier.as.identifier);
 		if (match(RPAREN)) {
 		  printf("fn empty\n");
 		  // empty function args
@@ -559,6 +566,7 @@ ExpressionResult parse() {
 return expr();
 }
 
+
 bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 	if (expr==NULL)  return false ;
 	if (strlen(buf) >= buf_size - 1) {
@@ -597,10 +605,17 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 	}
 }
 
+typedef enum {
+  INT, // INT is 0 = default
+  FLOAT,
+} Repr;
+
 typedef struct {
 	bool status;
-	int result;
+	double result;	
 } EvalResult; 
+
+#define MAKE_ERROR() (EvalResult){.status = false, .result=0}
 
 EvalResult eval(Expression *expr) {
 	if (expr == NULL) return (EvalResult) {false, 0};
@@ -608,10 +623,10 @@ EvalResult eval(Expression *expr) {
 		case BINARY_EXPR: ;
 			EvalResult lhs_r = eval(expr->as.binaryexpr.left);
 			EvalResult rhs_r = eval(expr->as.binaryexpr.right);
-			if (!lhs_r.status || !rhs_r.status) return (EvalResult){false, 0};
-			int lhs = lhs_r.result;
-			int rhs = rhs_r.result;
-			int out;
+			if (!lhs_r.status || !rhs_r.status) return MAKE_ERROR();
+			double lhs = lhs_r.result;
+			double rhs = rhs_r.result;
+			double out;
 			switch (expr->as.binaryexpr.operator.type) {
 				case PLUS:
 					out = lhs+rhs;
@@ -636,22 +651,39 @@ EvalResult eval(Expression *expr) {
 			return (EvalResult){true, out};
 		case UNARY_EXPR: ;
 			EvalResult right_r = eval(expr->as.unaryexpr.right);
-			int right = right_r.result;
+			double right = right_r.result;
 			switch (expr->as.unaryexpr.operator.type) {
 				case MINUS:
 					out = -right;
 					break;
 				default:
 					fprintf(stderr, "Not a valid unary operator.");
-					return (EvalResult){false,0};
+					return MAKE_ERROR();
 			}
 			return (EvalResult){true,out};
 			break;
 		case LITERAL_EXPR:
 			return (EvalResult){true,expr->as.literalexpr.value.as.integer};	
+		case CALL_EXPR: ;
+			Expression **args = expr->as.callexpr.args;	
+			size_t n_args = expr->as.callexpr.n_args;
+			char *identifier = expr->as.callexpr.identifier.as.identifier;
+			if (strcmp("sin", identifier) == 0) {
+				if (n_args != 1) {
+				  error(expr->as.callexpr.identifier, "sin(x) takes one argument.");
+				  return MAKE_ERROR();
+				};
+				// if (val.result->type != LITERAL_EXPR || args[0]->as.literalexpr.value.type != INTEGER) {
+				//   error(expr->as.callexpr.identifier, "expected integer argument");
+				//   return MAKE_ERROR();
+			  	// }
+				EvalResult args_res = eval(args[0]);
+				if (!args_res.status) return MAKE_ERROR();
+				return (EvalResult){true, sin(args_res.result)};
+			}
 		default:
 				fprintf(stderr,"Unhandled token type in eval\n");
-				return (EvalResult){false,0};
+				return MAKE_ERROR();
 	}
 }
 
@@ -684,7 +716,12 @@ int main() {
 					  continue;
 				  }
 
-				  printf("%d\n", result.result);
+				  double val = result.result;
+				  if ((int)val==val) {
+					printf("%d\n", (int)val); 
+				  }else {
+					printf("%f\n", val); 
+				  }
 				  free_expression(expr);
 				  break;	
 				case CREATE_EXPR_ERR:

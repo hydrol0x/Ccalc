@@ -3,13 +3,13 @@ TARGET  = calculator
 C_FILES = $(wildcard *.c)
 OBJS    = $(patsubst %.c,%.o,$(C_FILES))
 CFLAGS  = -g -Wall -Werror -pedantic-errors -g
-LDFLAGS =
+LDFLAGS =-lm
 LDLIBS  =
 
 .PHONY: all clean
 all: $(TARGET)
 $(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) $(OBJS) -o $@ $(LDLIBS)
+	$(CC) $(OBJS) -o $@ $(LDLIBS) $(LDFLAGS) 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 %.o: %.c
