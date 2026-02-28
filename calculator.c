@@ -878,10 +878,16 @@ int main() {
 				  }
 
 				  double val = result.result;
+					struct var_entry ans = {
+						.identifier="Ans",
+						.value=val,
+					};
+					hashmap_set(env_map, &ans); // special 'ans' variable that contains previous calculation's answer
+
 				  if ((int)val==val) {
-					printf("%d\n", (int)val); 
+						printf("%d\n", (int)val); 
 				  }else {
-					printf("%f\n", val); 
+						printf("%f\n", val); 
 				  }
 				  free_expression(expr);
 				  break;	
