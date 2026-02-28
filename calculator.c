@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
-//#include "hashmap.h"
+#include "hashmap.h"
 
 typedef struct {
 	const char* start;
@@ -28,6 +28,7 @@ typedef enum {
 	INTEGER,
 	IDENTIFIER,
 	COMMA,
+	EQUAL,
 	ENDSTREAM,
 } TokenType;
 
@@ -41,7 +42,7 @@ typedef struct {
 	TokenType type;
 	union { char operator;
 					int  integer; 
-					char *identifier;
+					char *string;
 	} as;
 } Token;
 
@@ -176,7 +177,7 @@ bool tokenize(Tokens *output){
 			}
 			vec_append(identifier, '\0');
 
-			Token token = {.type = IDENTIFIER, .as.identifier = identifier.items};
+			Token token = {.type = IDENTIFIER, .as.string = identifier.items};
 			vec_append((*output), token);
 			continue;
 		}
@@ -203,6 +204,9 @@ bool tokenize(Tokens *output){
 						break;
 				case ',':
 						token.type=COMMA;
+						break;
+				case '=':
+						token.type=EQUAL;
 						break;
 				default:
 					printf("[Error] Unknown input '%c'\n", current);
@@ -261,7 +265,7 @@ void print_token(Token token) {
 			printf(")");
 			break;
 		case IDENTIFIER:
-			printf("%s", token.as.identifier);
+			printf("%s", token.as.string);
 			break;
 		default:
 			fprintf(stderr,"Unhandled token type in print_token\n");
@@ -280,9 +284,12 @@ typedef enum {
 	LITERAL_EXPR,
 	PAREN_EXPR,
 	CALL_EXPR,
+	VAR_EXPR,
+	ASSIGN_EXPR,
 } ExpressionType;
 
 typedef struct Expression Expression;
+
 
 typedef struct {
 	size_t pos;
@@ -290,6 +297,11 @@ typedef struct {
 	size_t capacity;
 	Expression **items;
 } Expressions; // used for dynamic amount of expressions e.g in fn args
+
+typedef struct {
+	Token identifier;
+	Expression *r_value;
+} AssignExpr;
 
 typedef struct {
 	Expression *left;
@@ -316,6 +328,10 @@ typedef struct {
   size_t n_args;
 } CallExpr;
 
+typedef struct {
+	Token identifier;
+} VarExpr;
+
 struct Expression {
 	ExpressionType type;
 	union {
@@ -324,6 +340,8 @@ struct Expression {
 		LiteralExpr literalexpr;
 		ParenExpr parenexpr;
 		CallExpr callexpr;
+		AssignExpr assignment;
+		VarExpr variable;
 	} as;
 };
 
@@ -342,15 +360,20 @@ void free_expression(Expression *expr) {
             break;
         case LITERAL_EXPR:
             break;
-		case PAREN_EXPR:
-			free_expression(expr->as.parenexpr.expr);
-			break;
-		case CALL_EXPR: ;
-			size_t n_args = expr->as.callexpr.n_args;
-			for (size_t i=0; i<n_args; i++) {
-				free_expression(expr->as.callexpr.args[i]);
-			}
-			free(expr->as.callexpr.identifier.as.identifier);
+				case PAREN_EXPR:
+					free_expression(expr->as.parenexpr.expr);
+					break;
+				case CALL_EXPR: ;
+					size_t n_args = expr->as.callexpr.n_args;
+					for (size_t i=0; i<n_args; i++) {
+						free_expression(expr->as.callexpr.args[i]);
+					}
+					free(expr->as.callexpr.identifier.as.string);
+				case ASSIGN_EXPR:
+					free_expression(expr->as.assignment.r_value);	
+					break;
+				case VAR_EXPR: 
+					break;
     }
     free(expr);
 }
@@ -409,6 +432,31 @@ ExpressionResult create_unary_expr(Token op,Expression* right) {
 	expr->as.unaryexpr.right=right;
 	expr->as.unaryexpr.operator=op;
 	return (ExpressionResult){SUCCESS, expr};
+}
+
+ExpressionResult create_assign_expr(Token identifier, Expression *r_value) {
+	Expression *expr = malloc(sizeof(Expression));
+
+	if (expr == NULL) {
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+	}
+
+	expr->type=ASSIGN_EXPR;
+	expr->as.assignment.identifier=identifier;
+	expr->as.assignment.r_value=r_value;
+	return (ExpressionResult){SUCCESS,expr};
+}
+
+ExpressionResult create_var_expr(Token identifier) {
+	Expression *expr = malloc(sizeof(Expression));
+
+	if (expr == NULL) {
+		return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+	}
+	
+	expr->type=VAR_EXPR;
+	expr->as.variable.identifier=identifier;
+	return (ExpressionResult){SUCCESS,expr};
 }
 
 ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_args) {
@@ -486,25 +534,32 @@ ExpressionResult primary() {
   if (match(IDENTIFIER)) {
 	  Token identifier = previous();
 	  if (match(LPAREN)) {
-		// function call
-		if (match(RPAREN)) {
-		  printf("fn empty\n");
-		  // empty function args
-		  return create_call_expr(identifier, NULL, 0);
+				//	 function call
+				if (match(RPAREN)) {
+					printf("fn empty\n");
+					// empty function args
+					return create_call_expr(identifier, NULL, 0);
+				}
+
+				Expressions args = {0};
+				do {
+					ExpressionResult res = expr();
+					if (res.error!=SUCCESS) return res; // if one of the args fails then we stop parsing
+					vec_append(args, res.expr); 
+				} while (match(COMMA));
+
+				if (!consume_token(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
+
+				return create_call_expr(identifier, args.items, args.count);
+		} else if (match(EQUAL)) {
+				// assignment expr L_VAL = R_VAL, returns R_VAL
+				ExpressionResult res = expr();
+				if (res.error!=SUCCESS) return res;
+				return create_assign_expr(identifier, res.expr);
+		} else {
+				return create_var_expr(identifier);
 		}
-
-		Expressions args = {0};
-		do {
-		  ExpressionResult res = expr();
-		  if (res.error!=SUCCESS) return res; // if one of the args fails then we stop parsing
-		  vec_append(args, res.expr); 
-		} while (match(COMMA));
-
-		if (!consume_token(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
-
-		return create_call_expr(identifier, args.items, args.count);
-	  }
-  }
+	}
 
   error(peekTokens(),"Expected expression.");
   return (ExpressionResult){PARSE_ERR, NULL};
@@ -563,7 +618,7 @@ ExpressionResult expr() {
  return term();
 }
 ExpressionResult parse() {
-return expr();
+	return expr();
 }
 
 
@@ -590,13 +645,21 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",expr->as.literalexpr.value.as.integer);
 			return true;
 		case CALL_EXPR:
-			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%s(",expr->as.callexpr.identifier.as.identifier);
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%s(",expr->as.callexpr.identifier.as.string);
 			size_t i;
 			size_t n_args = expr->as.callexpr.n_args;
 			for (i=0; i<n_args; i++) {
 				AST_printer(expr->as.callexpr.args[i], buf, buf_size);
 				if (i!=n_args-1) snprintf(buf + strlen(buf),buf_size-strlen(buf),",");
 			}
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
+			return true;
+		case VAR_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%s",expr->as.variable.identifier.as.string);
+			return true;
+		case ASSIGN_EXPR:
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"Assign(%s,",expr->as.assignment.identifier.as.string);
+			AST_printer(expr->as.assignment.r_value, buf, buf_size);
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
 			return true;
 		default:
@@ -614,6 +677,30 @@ typedef struct {
 	bool status;
 	double result;	
 } EvalResult; 
+
+// entry for hashmap
+struct var_entry {
+    char *identifier;
+    double value;
+};
+
+uint64_t var_hash(const void *item, uint64_t seed0, uint64_t seed1) {
+    const struct var_entry *entry = item;
+    return hashmap_sip(entry->identifier, strlen(entry->identifier), seed0, seed1);
+}
+
+int var_compare(const void *a, const void *b, void *udata) {
+    const struct var_entry *ea = a;
+    const struct var_entry *eb = b;
+    return strcmp(ea->identifier, eb->identifier);
+}
+
+void var_free(void *item) {
+    struct var_entry *entry = item;
+    free(entry->identifier); 
+}
+
+struct hashmap *env_map = NULL;
 
 #define MAKE_ERROR() (EvalResult){.status = false, .result=0}
 
@@ -667,28 +754,43 @@ EvalResult eval(Expression *expr) {
 		case CALL_EXPR: ;
 			Expression **args = expr->as.callexpr.args;	
 			size_t n_args = expr->as.callexpr.n_args;
-			char *identifier = expr->as.callexpr.identifier.as.identifier;
+			char *identifier = expr->as.callexpr.identifier.as.string;
 			if (strcmp("sin", identifier) == 0) {
 				if (n_args != 1) {
 				  error(expr->as.callexpr.identifier, "sin(x) takes one argument.");
 				  return MAKE_ERROR();
 				};
-				// if (val.result->type != LITERAL_EXPR || args[0]->as.literalexpr.value.type != INTEGER) {
-				//   error(expr->as.callexpr.identifier, "expected integer argument");
-				//   return MAKE_ERROR();
-			  	// }
+
 				EvalResult args_res = eval(args[0]);
 				if (!args_res.status) return MAKE_ERROR();
 				return (EvalResult){true, sin(args_res.result)};
 			}
-		default:
-				fprintf(stderr,"Unhandled token type in eval\n");
+		case ASSIGN_EXPR: ;
+			EvalResult right_res = eval(expr->as.assignment.r_value);	
+			if (!right_res.status) return MAKE_ERROR();
+			struct var_entry entry = {
+					.identifier=strdup(expr->as.assignment.identifier.as.string),
+					.value=right_res.result			
+			};
+			hashmap_set(env_map, &entry); // hashmap copies entry
+			return right_res;
+		case VAR_EXPR: ;
+			struct var_entry key = { .identifier = expr->as.variable.identifier.as.string};
+			const struct var_entry *found = hashmap_get(env_map, &key);
+			if (found) return (EvalResult){true, found->value};
+			else {
+				error(expr->as.variable.identifier, "Undefined variable.");
 				return MAKE_ERROR();
+			}
+		default:
+			fprintf(stderr,"Unhandled token type in eval\n");
+			return MAKE_ERROR();
 	}
 }
 
 int main() {
     char line[256];
+		env_map=hashmap_new(sizeof(struct var_entry), 0, 0, 0,var_hash, var_compare, var_free, NULL);
     while (1) {
         printf("Calc > "); 
         if (fgets(line, sizeof(line), stdin)) {
@@ -732,5 +834,6 @@ int main() {
 			  }
         }
     }
+		hashmap_free(env_map);
     return 0;
 }
