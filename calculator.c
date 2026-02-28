@@ -25,7 +25,7 @@ typedef enum {
 	SLASH,
 	LPAREN,
 	RPAREN,
-	INTEGER,
+	NUMBER,
 	IDENTIFIER,
 	COMMA,
 	EQUAL,
@@ -41,7 +41,7 @@ typedef enum {
 typedef struct {
 	TokenType type;
 	union { char operator;
-					int  integer; 
+					double number; 
 					char *string;
 	} as;
 } Token;
@@ -147,23 +147,40 @@ bool tokenize(Tokens *output){
 		} 
 		else if (isdigit(current)) {
 			char digit_c;
-			int integer=0;
+			// int integer=0;
+			String number = {0};
 			while (!isspace(digit_c=peek())) {
 				if (isdigit(digit_c)) {
-						integer*=10;
-						integer+=ctod(digit_c);
+						vec_append(number, digit_c);
 						advance();
 						continue;
-				} else if (is_op(digit_c) || digit_c==')' || digit_c==',') {
+				} else if (is_op(digit_c) || digit_c==')' || digit_c==',' || digit_c=='.') {
 						break;
 				} else {
 					printf("[Error] Invalid decimal input, expected digit found '%c'\n", digit_c);
 					return false;
 				}
 			}
+			if (peek() == '.') {
+				vec_append(number,'.');
+				advance();
+				while (!isspace(digit_c=peek())) {
+					if (isdigit(digit_c)) {
+						vec_append(number, digit_c);
+						advance();
+						continue;
+					} else if (is_op(digit_c) || digit_c==')' || digit_c==',') {
+						break;
+					} else {
+						printf("[Error] Invalid decimal input, expected digit found '%c'\n", digit_c);
+						return false;
+					}
+				}
+			}
+			double out = strtod(number.items, NULL);
 			Token token;
-			token.type=INTEGER;
-			token.as.integer=integer;
+			token.type=NUMBER;
+			token.as.number =out;
 			vec_append((*output), token);
 			continue;
 		}
@@ -208,6 +225,35 @@ bool tokenize(Tokens *output){
 				case '=':
 						token.type=EQUAL;
 						break;
+				case '.': ;
+					// printf("[Error] Float must have number before decimal \n");
+					String number = {0};
+					char digit_c;
+					vec_append(number,'.');
+					advance();
+					while (!isspace(digit_c=peek())) {
+						if (isdigit(digit_c)) {
+							vec_append(number, digit_c);
+								advance();
+								continue;
+						} else if (is_op(digit_c) || digit_c==')' || digit_c==',') {
+								break;
+						} else {
+								printf("[Error] Invalid decimal input, expected digit found '%c'\n", digit_c);
+								return false;
+						}
+					}
+					char *remainder;	
+        	double out = strtod(number.items, &remainder);
+					if (remainder[0]=='.') {
+							printf("[Error] Invalid decimal input, expected digit after '.'\n");
+							return false;
+					}
+        	Token token;
+        	token.type=NUMBER;
+        	token.as.number =out;
+        	vec_append((*output), token);
+        	continue;
 				default:
 					printf("[Error] Unknown input '%c'\n", current);
 					return false;
@@ -231,9 +277,9 @@ bool token_to_str(Token token, char* str) {
 		case SLASH:
 			str[0] = token.as.operator; 
 			return true;
-		case INTEGER:
-			printf("%d", token.as.integer);
-			str[0] = token.as.integer+'0'; 
+		case NUMBER:
+			printf("%f", token.as.number);
+			str[0] = token.as.number+'0'; 
 			return true;
 		case ENDSTREAM:
 		  str[0]='#';
@@ -252,8 +298,13 @@ void print_token(Token token) {
 		case SLASH:
 			printf("%c", token.as.operator);
 			break;
-		case INTEGER:
-			printf("%d", token.as.integer);
+		case NUMBER:;
+			double number = token.as.number;
+			if ((int)number == number) {
+				printf("%d", (int)token.as.number);
+			} else {
+				printf("%f", token.as.number);
+			}
 			break;
 		case ENDSTREAM:
 			printf("<EOF>");
@@ -266,6 +317,9 @@ void print_token(Token token) {
 			break;
 		case IDENTIFIER:
 			printf("%s", token.as.string);
+			break;
+		case COMMA:
+			printf(",");
 			break;
 		default:
 			fprintf(stderr,"Unhandled token type in print_token\n");
@@ -519,7 +573,7 @@ bool consume_token(TokenType type, char *message) {
 ExpressionResult expr(); 
 
 ExpressionResult primary() {
-  if (match(INTEGER)) {
+  if (match(NUMBER)) {
 	  ExpressionResult res = create_literal_expr(previous());
 	  return res;
   }
@@ -641,8 +695,13 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
 			AST_printer(expr->as.unaryexpr.right, buf, buf_size);
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
 			return true;
-		case LITERAL_EXPR:
-			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",expr->as.literalexpr.value.as.integer);
+		case LITERAL_EXPR:;
+			double number = expr->as.literalexpr.value.as.number;
+			if ((int)number==number) {
+				snprintf(buf + strlen(buf),buf_size-strlen(buf),"%d",(int)number);
+				return true;
+			}
+			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%f",number);
 			return true;
 		case CALL_EXPR:
 			snprintf(buf + strlen(buf),buf_size-strlen(buf),"%s(",expr->as.callexpr.identifier.as.string);
@@ -750,7 +809,7 @@ EvalResult eval(Expression *expr) {
 			return (EvalResult){true,out};
 			break;
 		case LITERAL_EXPR:
-			return (EvalResult){true,expr->as.literalexpr.value.as.integer};	
+			return (EvalResult){true,expr->as.literalexpr.value.as.number};	
 		case CALL_EXPR: ;
 			Expression **args = expr->as.callexpr.args;	
 			size_t n_args = expr->as.callexpr.n_args;
