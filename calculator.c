@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <assert.h>
 #include "hashmap.h"
 
 typedef struct {
@@ -34,7 +35,10 @@ typedef enum {
     RCURLY,
     SEMICOLON,
     ENDSTREAM,
+    QUESTION,
+    COLON,
 } TokenType;
+#define N_TOKEN_TYPE 17
 
 typedef enum {
     SUCCESS,
@@ -142,9 +146,10 @@ int get_keyword_i(char *string) {
 }
 
 bool is_digit_delim(char c) {
-    return (c==')' || c==',' || c==';' || c=='}');
+    return (c==')' || c==',' || c==';' || c=='}' || c=='?' || c==':');
 }
 bool tokenize(Tokens *output){
+    _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in tokenize()");
     char current;
     while ((current = peek())) {
         if (isspace(current)) {
@@ -153,7 +158,6 @@ bool tokenize(Tokens *output){
         } 
         else if (isdigit(current)) {
             char digit_c;
-            // int integer=0;
             String number = {0};
             while (!isspace(digit_c=peek())) {
                 if (isdigit(digit_c)) {
@@ -247,6 +251,12 @@ bool tokenize(Tokens *output){
                     break;
                 case '}':
                     token.type=RCURLY;
+                    break;
+                case '?':
+                    token.type=QUESTION;
+                    break;
+                case ':':
+                    token.type=COLON;
                     break;
                 case '.': ;
                     // printf("[Error] Float must have number before decimal \n");
@@ -379,6 +389,7 @@ typedef enum {
     VAR_EXPR,
     ASSIGN_EXPR,
     FN_EXPR,
+    TERNARY_EXPR
 } ExpressionType;
 
 typedef struct Expression Expression;
@@ -389,6 +400,12 @@ typedef struct {
     size_t capacity;
     Expression **items;
 } Expressions; // used for dynamic amount of expressions e.g in fn args
+
+typedef struct {
+    Expression *condition;
+    Expression *if_true;
+    Expression *if_false;
+} TernaryExpr;
 
 typedef struct {
     Token identifier;
@@ -442,6 +459,7 @@ struct Expression {
         CallExpr callexpr;
         FnExpr function;
         AssignExpr assignment;
+        TernaryExpr ternary;
         VarExpr variable;
     } as;
 };
@@ -480,6 +498,11 @@ void free_expression(Expression *expr) {
                 free(expr->as.variable.identifier.as.string);
             }
             break; 
+        case TERNARY_EXPR:
+            free_expression(expr->as.ternary.condition);
+            free_expression(expr->as.ternary.if_false);
+            free_expression(expr->as.ternary.if_true);
+            break;
         case FN_EXPR:
             break;  // TODO: write free fn
         default:
@@ -493,6 +516,20 @@ typedef struct {
     Error error;
     Expression *expr;
 } ExpressionResult;
+
+ExpressionResult create_ternary_expr(Expression* condition, Expression* if_true, Expression *if_false) {
+    Expression *expr = malloc(sizeof(Expression));
+    if (expr == NULL) {
+        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+    }
+
+    expr->type=TERNARY_EXPR;
+    expr->as.ternary.condition = condition;
+    expr->as.ternary.if_false = if_false ;
+    expr->as.ternary.if_true= if_true;
+
+    return (ExpressionResult){SUCCESS, expr};
+}
 
 ExpressionResult create_paren_expr(Expression* middle) {
     Expression *expr = malloc(sizeof(Expression));
@@ -692,6 +729,11 @@ Expression* copy_expression(Expression *expr) {
                 new_expr->as.callexpr.args[i] = copy_expression(expr->as.callexpr.args[i]);
             }
             break;
+        case TERNARY_EXPR:
+            new_expr->as.ternary.condition = copy_expression(expr->as.ternary.condition);
+            new_expr->as.ternary.if_true= copy_expression(expr->as.ternary.if_true);
+            new_expr->as.ternary.if_false= copy_expression(expr->as.ternary.if_false);
+            break;
         case FN_EXPR:
             new_expr->as.function.identifier = copy_token(expr->as.function.identifier);
             
@@ -843,11 +885,42 @@ ExpressionResult term() {
     return res;
 }
 
+ExpressionResult ternary() {
+    ExpressionResult res = term();
+    if (res.error != SUCCESS) return res;
+
+    //if (match(COLON)) return (ExpressionResult){PARSE_ERR,NULL};
+
+    if (match(QUESTION)) {
+        ExpressionResult if_true_res = term();
+        if (if_true_res.error != SUCCESS) {
+            free_expression(if_true_res.expr);
+            return if_true_res;
+        }
+
+        consume_token(COLON, "Ternary '?' must have corresponding ':'");
+
+        ExpressionResult if_false_res = term();
+        if (if_false_res.error != SUCCESS) {
+            free_expression(if_false_res.expr);
+            return if_false_res;
+        }
+
+        return create_ternary_expr(res.expr, if_true_res.expr, if_false_res.expr);
+    } else if (match(COLON)) {
+        error(peekTokens(), "Stray ':' found without a preceding '?'.");
+        free_expression(res.expr);
+        return (ExpressionResult){PARSE_ERR, NULL};
+    }
+    return res;
+}
+
 ExpressionResult expr() {
-    return term();
+    return ternary();
 }
 
 ExpressionResult parse() {
+    _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in parse()");
     ExpressionResult res = expr();
     if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
 
@@ -902,6 +975,15 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
         case ASSIGN_EXPR:
             snprintf(buf + strlen(buf),buf_size-strlen(buf),"Assign(%s,",expr->as.assignment.identifier.as.string);
             AST_printer(expr->as.assignment.r_value, buf, buf_size);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
+            return true;
+        case TERNARY_EXPR:
+            snprintf(buf + strlen(buf),buf_size-strlen(buf),"Ternary(");
+            AST_printer(expr->as.ternary.condition, buf, buf_size);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf)," ? ");
+            AST_printer(expr->as.ternary.if_true, buf, buf_size);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf)," : ");
+            AST_printer(expr->as.ternary.if_false, buf, buf_size);
             snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
             return true;
         case FN_EXPR:
@@ -1099,6 +1181,14 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
             Expression *return_expr = num_exprs>0 ? fn_body[num_exprs-1] : &Literal_Expr(0);
             EvalResult return_val = eval_with_env(return_expr, local_var_env);
             return return_val;
+        case TERNARY_EXPR: ;
+            EvalResult condition_res = eval(expr->as.ternary.condition);
+            if (!condition_res.status) return MAKE_ERROR();
+            if (condition_res.result == 0) {
+                // false
+                return eval(expr->as.ternary.if_false); 
+            }
+            return eval(expr->as.ternary.if_true); 
         case ASSIGN_EXPR: ;
             EvalResult right_res = eval(expr->as.assignment.r_value);	
             if (!right_res.status) return MAKE_ERROR();
