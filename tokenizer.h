@@ -55,7 +55,7 @@ typedef enum {
 typedef struct {
     TokenType type;
     union { 
-        char operator;
+        char op;
         double number; 
         char *string;
     } as;

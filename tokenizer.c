@@ -216,7 +216,7 @@ bool tokenize(Tokens *output){
                     printf("[Error] Unknown input '%c'\n", current);
                     return false;
             }
-            token.as.operator=current;
+            token.as.op=current;
             vec_append((*output), token);
         }
         advance();
@@ -233,7 +233,7 @@ bool token_to_str(Token token, char* str) {
         case MINUS:
         case STAR:
         case SLASH:
-            str[0] = token.as.operator; 
+            str[0] = token.as.op; 
             return true;
         case NUMBER:
             printf("%f", token.as.number);
@@ -254,7 +254,7 @@ void print_token(Token token) {
         case MINUS:
         case STAR:
         case SLASH:
-            printf("%c", token.as.operator);
+            printf("%c", token.as.op);
             break;
         case NUMBER:;
             double number = token.as.number;
