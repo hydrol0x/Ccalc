@@ -70,7 +70,7 @@ int get_keyword_i(char *string) {
 }
 
 bool is_digit_delim(char c) {
-    return (c==')' || c==',' || c==';' || c=='}' || c=='?' || c==':');
+    return (c==')' || c==',' || c==';' || c=='}' || c=='?' || c==':' || c=='&' || c=='|' || c=='=');
 }
 
 bool tokenize(Tokens *output){
@@ -183,6 +183,24 @@ bool tokenize(Tokens *output){
                 case ':':
                     token.type=COLON;
                     break;
+                case '&':
+                    advance_char(); 
+                    if (peek_char()!='&') {
+                        printf("[ERROR] Logical and is &&, no operator '&'\n");
+                        return false;
+                    }
+                    // Logical and uses & as op type
+                    token.type=LOGIC_AND;
+                    break;
+                 case '|':
+                    advance_char(); 
+                    if (peek_char()!='|') {
+                        printf("[ERROR] Logical and is ||, no operator '|'\n");
+                        return false;
+                    }
+                    // Logical and uses | as op type
+                    token.type=LOGIC_OR;
+                    break;
                 case '.': ;
                     // printf("[Error] Float must have number before decimal \n");
                     String number = {0};
@@ -227,76 +245,74 @@ bool tokenize(Tokens *output){
     return true;
 }
 
-bool token_to_str(Token token, char* str) {
+
+bool str_from(Token token, char *str, size_t strlen) {
+    // str is some fixed size buffer
     switch (token.type) {
         case PLUS:
         case MINUS:
         case STAR:
-        case SLASH:
-            str[0] = token.as.op; 
+        case SLASH: ;
+            snprintf(str, strlen, "%c", token.as.op);
             return true;
-        case NUMBER:
-            printf("%f", token.as.number);
-            str[0] = token.as.number+'0'; 
+        case NUMBER:;
+            double number = token.as.number;
+            if ((int)number == number) {
+                snprintf(str, strlen, "%d", (int)token.as.number);
+            } else {
+                snprintf(str, strlen, "%f", token.as.number);
+            }
             return true;
         case ENDSTREAM:
-            str[0]='#';
+            snprintf(str, strlen, "<EOF>");
+            return true;
+        case LPAREN:
+            snprintf(str, strlen,"(");
+            return true;
+        case RPAREN:
+            snprintf(str, strlen,")");
+            return true;
+        case IDENTIFIER:
+            snprintf(str, strlen,"%s", token.as.string);
+            return true;
+        case COMMA:
+            snprintf(str, strlen,",");
+            return true;
+        case FN:
+            snprintf(str, strlen,"<FN>");
+            return true;
+        case LCURLY:
+            snprintf(str, strlen,"{");
+            return true;
+        case RCURLY:
+            snprintf(str, strlen,"}");
+            return true;
+        case SEMICOLON:
+            snprintf(str, strlen,";");
+            return true;
+        case EQUAL:
+            snprintf(str, strlen,"=");
+            return true;
+        case LOGIC_AND:
+            snprintf(str, strlen,"&&");
+            return true;
+        case LOGIC_OR:
+            snprintf(str, strlen,"||");
             return true;
         default:
-            fprintf(stderr,"Unhandled token type in token_to_str");
+            fprintf(stderr,"Unhandled token type in token from_str; enum %d\n", token.type);
             return false;
     }
 }
 
+#define PRINT_TOK_BUFF_SIZE 10
 void print_token(Token token) {
-    switch (token.type) {
-        case PLUS:
-        case MINUS:
-        case STAR:
-        case SLASH:
-            printf("%c", token.as.op);
-            break;
-        case NUMBER:;
-            double number = token.as.number;
-            if ((int)number == number) {
-                printf("%d", (int)token.as.number);
-            } else {
-                printf("%f", token.as.number);
-            }
-            break;
-        case ENDSTREAM:
-            printf("<EOF>");
-            break;
-        case LPAREN:
-            printf("(");
-            break;
-        case RPAREN:
-            printf(")");
-            break;
-        case IDENTIFIER:
-            printf("%s", token.as.string);
-            break;
-        case COMMA:
-            printf(",");
-            break;
-        case FN:
-            printf("<FN>");
-            break;
-        case LCURLY:
-            printf("{");
-            break;
-        case RCURLY:
-            printf("}");
-            break;
-        case SEMICOLON:
-            printf(";");
-            break;
-        case EQUAL:
-            printf("=");
-            break;
-        default:
-            fprintf(stderr,"Unhandled token type in print_token enum %d\n", token.type);
+    char buffer[PRINT_TOK_BUFF_SIZE] = "";
+    if (!str_from(token, buffer, sizeof(buffer))) {
+        fprintf(stderr, "Error in str_from in print_token() printing token type %d", token.type);
+        exit(1);
     }
+    printf("%s", buffer);
 }
 
 void print_tokens(Tokens tokens) {

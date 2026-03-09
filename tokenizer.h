@@ -93,7 +93,7 @@ bool is_op(char c);
 int get_keyword_i(char *string);
 bool is_digit_delim(char c);
 bool tokenize(Tokens *output);
-bool token_to_str(Token token, char* str);
+bool str_from(Token token, char *str, size_t strlen);
 void print_token(Token token);
 void print_tokens(Tokens tokens);
 

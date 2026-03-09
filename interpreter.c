@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "interpreter.h"
+#include "tokenizer.h"
 
 struct hashmap *env_map = NULL; // declared global variables
 struct hashmap *fn_map = NULL; //  declared global fns 
@@ -87,8 +88,14 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
                 case STAR:
                     out = lhs*rhs;
                     break;
+                case LOGIC_AND:
+                    out = lhs && rhs;
+                    break;
+                case LOGIC_OR:
+                    out = lhs || rhs;
+                    break;
                 default:
-                    fprintf(stderr, "Not an operator.");
+                    fprintf(stderr, "Not an operator.\n");
                     return (EvalResult){false,0};
             }
             return (EvalResult){true, out};

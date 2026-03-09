@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "parser.h"
+#include "tokenizer.h"
 
 void free_expression(Expression *expr) {
     if (expr == NULL) return;
@@ -414,8 +415,44 @@ ExpressionResult term() {
     return res;
 }
 
-ExpressionResult ternary() {
+ExpressionResult and() {
     ExpressionResult res = term();
+    if (res.error != SUCCESS) return res;
+
+    while (match(LOGIC_AND)) {
+        Token op = previous();
+        ExpressionResult right = term();
+        if (right.error != SUCCESS) {
+            free_expression(res.expr); 
+            return right;
+        }
+
+        res = create_binary_expr(res.expr, op, right.expr);
+    }
+
+    return res;
+}
+
+ExpressionResult or() {
+    ExpressionResult res = and();
+    if (res.error != SUCCESS) return res;
+
+    while (match(LOGIC_OR)) {
+        Token op = previous();
+        ExpressionResult right = and();
+        if (right.error != SUCCESS) {
+            free_expression(res.expr); 
+            return right;
+        }
+
+        res = create_binary_expr(res.expr, op, right.expr);
+    }
+
+    return res;
+}
+
+ExpressionResult ternary() {
+    ExpressionResult res = or();
     if (res.error != SUCCESS) return res;
 
     //if (match(COLON)) return (ExpressionResult){PARSE_ERR,NULL};
@@ -449,14 +486,22 @@ ExpressionResult expr() {
 }
 
 ExpressionResult parse() {
-    _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in parse()");
+    // _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in parse()");
     ExpressionResult res = expr();
     if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
 
     if (match(RPAREN)) { 
         error(peek_tokens(), "Unmatched ')'");
         return (ExpressionResult){PARSE_ERR, NULL};
+    } else if (match(EQUAL)) {
+        error(peek_tokens(), "Assignment to invalid identifier");
+        return (ExpressionResult){PARSE_ERR, NULL};
+    }  else if (!match(ENDSTREAM)) {
+        printf("%d\n",peek_tokens().type);
+        error(peek_tokens(), "Unhandled tokens in parser");
+        return (ExpressionResult){PARSE_ERR, NULL};
     }
+
     return res;
 }
 
@@ -467,10 +512,12 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
         return false;
     }
     switch (expr->type) {
-        case BINARY_EXPR:
+        case BINARY_EXPR: ;
+            char opstr[3] = "";
+            str_from(expr->as.binaryexpr.operator, opstr, 3);
             snprintf(buf + strlen(buf),buf_size-strlen(buf),"Binary(");
             AST_printer(expr->as.binaryexpr.left, buf, buf_size);
-            snprintf(buf + strlen(buf),buf_size-strlen(buf)," ,'%c', ",expr->as.binaryexpr.operator.as.op);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf)," ,'%s', ", opstr);
             AST_printer(expr->as.binaryexpr.right, buf, buf_size);
             snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
             return true;
