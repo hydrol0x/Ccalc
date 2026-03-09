@@ -167,25 +167,25 @@ ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_
     return (ExpressionResult){SUCCESS, expr};
 }
 
-Token peekTokens() {
+Token peek_tokens() {
     return tokens.items[tokens.pos];    
 }
 
-bool endOfTokens() {
-    return peekTokens().type == ENDSTREAM;
+bool end_of_tokens() {
+    return peek_tokens().type == ENDSTREAM;
 }
 
-Token advanceTokens() {
+Token advance_tokens() {
     return tokens.items[tokens.pos++];
 }
 
 bool check(TokenType type) {
-    return peekTokens().type == type;
+    return peek_tokens().type == type;
 }
 
 bool match(TokenType type) {
     if (check(type)) {
-        advanceTokens();
+        advance_tokens();
         return true;
     }
     return false;
@@ -205,8 +205,8 @@ void error(Token token, char *message) {
 }
 
 bool consume_token(TokenType type, char *message) {
-    if (check(type)) {advanceTokens(); return true;};
-    error(peekTokens(), message);
+    if (check(type)) {advance_tokens(); return true;};
+    error(peek_tokens(), message);
     return false;
 }
 
@@ -362,7 +362,7 @@ ExpressionResult primary() {
         }
     }
 
-    error(peekTokens(),"Expected expression.");
+    error(peek_tokens(),"Expected expression.");
     return (ExpressionResult){PARSE_ERR, NULL};
 }
 
@@ -437,7 +437,7 @@ ExpressionResult ternary() {
 
         return create_ternary_expr(res.expr, if_true_res.expr, if_false_res.expr);
     } else if (match(COLON)) {
-        error(peekTokens(), "Stray ':' found without a preceding '?'.");
+        error(peek_tokens(), "Stray ':' found without a preceding '?'.");
         free_expression(res.expr);
         return (ExpressionResult){PARSE_ERR, NULL};
     }
@@ -454,7 +454,7 @@ ExpressionResult parse() {
     if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
 
     if (match(RPAREN)) { 
-        error(peekTokens(), "Unmatched ')'");
+        error(peek_tokens(), "Unmatched ')'");
         return (ExpressionResult){PARSE_ERR, NULL};
     }
     return res;
@@ -470,12 +470,12 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
         case BINARY_EXPR:
             snprintf(buf + strlen(buf),buf_size-strlen(buf),"Binary(");
             AST_printer(expr->as.binaryexpr.left, buf, buf_size);
-            snprintf(buf + strlen(buf),buf_size-strlen(buf)," ,'%c', ",expr->as.binaryexpr.operator.as.operator);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf)," ,'%c', ",expr->as.binaryexpr.operator.as.op);
             AST_printer(expr->as.binaryexpr.right, buf, buf_size);
             snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
             return true;
         case UNARY_EXPR:
-            snprintf(buf + strlen(buf),buf_size-strlen(buf),"Unary('%c', ",expr->as.unaryexpr.operator.as.operator);
+            snprintf(buf + strlen(buf),buf_size-strlen(buf),"Unary('%c', ",expr->as.unaryexpr.operator.as.op);
             AST_printer(expr->as.unaryexpr.right, buf, buf_size);
             snprintf(buf + strlen(buf),buf_size-strlen(buf),")");
             return true;

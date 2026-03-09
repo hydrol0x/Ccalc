@@ -50,6 +50,9 @@ typedef enum {
     ENDSTREAM,
     QUESTION,
     COLON,
+    LOGIC_AND,
+    LOGIC_OR,
+    BANG,
 } TokenType;
 
 typedef struct {
@@ -73,12 +76,12 @@ typedef struct program {
     int pos;
 } program;
 
-/* Global variables - defined in the implementation file */
+/* Globals */
 extern Tokens tokens;
 extern program p;
 extern const char keywords[];
 
-/* Function Signatures */
+/* Functions */
 void free_tokens(Tokens *ts);
 void reset_program(program *prog, char *input);
 bool eof();
