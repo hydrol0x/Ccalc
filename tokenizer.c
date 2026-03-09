@@ -27,17 +27,17 @@ bool eof() {
     return p.pos > strlen(p.string);
 }
 
-char peek() {
+char peek_char() {
     if (eof()) return '\0';
     return p.string[p.pos];
 }
 
-char consume() {
+char consume_char() {
     if (eof()) return '\0';
     return p.string[p.pos++];
 }
 
-void advance() {
+void advance_char() {
     if (eof()) return;
     p.pos++;
 }
@@ -76,18 +76,18 @@ bool is_digit_delim(char c) {
 bool tokenize(Tokens *output){
     _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in tokenize()");
     char current;
-    while ((current = peek())) {
+    while ((current = peek_char())) {
         if (isspace(current)) {
-            advance();
+            advance_char();
             continue;
         } 
         else if (isdigit(current)) {
             char digit_c;
             String number = {0};
-            while (!isspace(digit_c=peek())) {
+            while (!isspace(digit_c=peek_char())) {
                 if (isdigit(digit_c)) {
                     vec_append(number, digit_c);
-                    advance();
+                    advance_char();
                     continue;
                 } else if (is_op(digit_c) || is_digit_delim(digit_c) || digit_c=='.') {
                     break;
@@ -96,13 +96,13 @@ bool tokenize(Tokens *output){
                     return false;
                 }
             }
-            if (peek() == '.') {
+            if (peek_char() == '.') {
                 vec_append(number,'.');
-                advance();
-                while (!isspace(digit_c=peek())) {
+                advance_char();
+                while (!isspace(digit_c=peek_char())) {
                     if (isdigit(digit_c)) {
                         vec_append(number, digit_c);
-                        advance();
+                        advance_char();
                         continue;
                     } else if (is_op(digit_c) || is_digit_delim(digit_c)) { 
                         break;
@@ -123,9 +123,9 @@ bool tokenize(Tokens *output){
             char id_c; 
             String identifier = {0};
             int i = 0;
-            while ((isalnum(id_c=peek())) && i<sizeof(identifier)-1) {
+            while ((isalnum(id_c=peek_char())) && i<sizeof(identifier)-1) {
                 vec_append(identifier, id_c);    
-                advance();
+                advance_char();
             }
             vec_append(identifier, '\0');
 
@@ -188,11 +188,11 @@ bool tokenize(Tokens *output){
                     String number = {0};
                     char digit_c;
                     vec_append(number,'.');
-                    advance();
-                    while (!isspace(digit_c=peek())) {
+                    advance_char();
+                    while (!isspace(digit_c=peek_char())) {
                         if (isdigit(digit_c)) {
                             vec_append(number, digit_c);
-                            advance();
+                            advance_char();
                             continue;
                         } else if (is_op(digit_c) || digit_c==')' || digit_c==',' || digit_c==';') {
                             break;
@@ -219,7 +219,7 @@ bool tokenize(Tokens *output){
             token.as.op=current;
             vec_append((*output), token);
         }
-        advance();
+        advance_char();
     }
     Token end;
     end.type = ENDSTREAM;
