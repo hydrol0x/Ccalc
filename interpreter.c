@@ -94,8 +94,13 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
                 case LOGIC_OR:
                     out = lhs || rhs;
                     break;
-                default:
-                    fprintf(stderr, "Not an operator.\n");
+                case EQUALEQUAL:
+                    out = lhs == rhs;
+                    break;
+                default: ;
+                    char opstr[3]="";
+                    str_from(expr->as.binaryexpr.operator, opstr, 3);
+                    fprintf(stderr, "[ERROR] Encountered '%s', not a valid operator\n",opstr);
                     return (EvalResult){false,0};
             }
             return (EvalResult){true, out};

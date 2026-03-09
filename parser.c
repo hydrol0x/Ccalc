@@ -415,13 +415,32 @@ ExpressionResult term() {
     return res;
 }
 
-ExpressionResult and() {
+
+ExpressionResult comparison() {
     ExpressionResult res = term();
+    if (res.error != SUCCESS) return res;
+
+    while (match(EQUALEQUAL)) {
+        Token op = previous();
+        ExpressionResult right = term();
+        if (right.error != SUCCESS) {
+            free_expression(res.expr); 
+            return right;
+        }
+
+        res = create_binary_expr(res.expr, op, right.expr);
+    }
+
+    return res;
+}
+
+ExpressionResult and() {
+    ExpressionResult res = comparison();
     if (res.error != SUCCESS) return res;
 
     while (match(LOGIC_AND)) {
         Token op = previous();
-        ExpressionResult right = term();
+        ExpressionResult right = comparison();
         if (right.error != SUCCESS) {
             free_expression(res.expr); 
             return right;
@@ -497,7 +516,6 @@ ExpressionResult parse() {
         error(peek_tokens(), "Assignment to invalid identifier");
         return (ExpressionResult){PARSE_ERR, NULL};
     }  else if (!match(ENDSTREAM)) {
-        printf("%d\n",peek_tokens().type);
         error(peek_tokens(), "Unhandled tokens in parser");
         return (ExpressionResult){PARSE_ERR, NULL};
     }

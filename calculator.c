@@ -18,6 +18,13 @@ int main() {
                 continue;
             }
 
+            printf("Token stream: ");
+            for (int i=0; i<tokens.count; i++) {
+                print_token(tokens.items[i]);
+                printf(", ");
+            }
+            printf("\n");
+
             ExpressionResult res = parse();
             switch (res.error) {
                 case SUCCESS: ;

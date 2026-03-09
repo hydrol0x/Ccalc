@@ -23,13 +23,22 @@ void reset_program(program *prog, char *input) {
     prog->pos = 0;
 }
 
+
 bool eof() {
-    return p.pos > strlen(p.string);
+    if (!p.string) {
+        return true; 
+    }
+    return p.string[p.pos] == '\0';
 }
 
 char peek_char() {
     if (eof()) return '\0';
     return p.string[p.pos];
+}
+
+char look_ahead_char() {
+    if (eof()) return '\0';
+    return p.string[p.pos+1];
 }
 
 char consume_char() {
@@ -166,6 +175,11 @@ bool tokenize(Tokens *output){
                     token.type=COMMA;
                     break;
                 case '=':
+                    if (look_ahead_char()=='=') {
+                        token.type=EQUALEQUAL;
+                        advance_char();
+                        break;
+                    }
                     token.type=EQUAL;
                     break;
                 case ';':
@@ -184,23 +198,27 @@ bool tokenize(Tokens *output){
                     token.type=COLON;
                     break;
                 case '&':
-                    advance_char(); 
-                    if (peek_char()!='&') {
-                        printf("[ERROR] Logical and is &&, no operator '&'\n");
-                        return false;
+                    if (look_ahead_char()=='&') {
+                        // Logical and uses & as op type
+                        advance_char();
+                        token.type=LOGIC_AND;
+                        break;
                     }
-                    // Logical and uses & as op type
-                    token.type=LOGIC_AND;
-                    break;
+
+                    // allow for later implement bitwise &
+                    printf("[ERROR] Logical and is &&, no operator '&'\n");
+                    return false;
                  case '|':
-                    advance_char(); 
-                    if (peek_char()!='|') {
-                        printf("[ERROR] Logical and is ||, no operator '|'\n");
-                        return false;
+                    if (look_ahead_char()=='|') {
+                        // Logical or uses | as op type
+                        advance_char();
+                        token.type=LOGIC_OR;
+                        break;
                     }
-                    // Logical and uses | as op type
-                    token.type=LOGIC_OR;
-                    break;
+
+                    // allow for later implement bitwise |
+                    printf("[ERROR] Logical and is ||, no operator '|'\n");
+                    return false;
                 case '.': ;
                     // printf("[Error] Float must have number before decimal \n");
                     String number = {0};
@@ -287,6 +305,12 @@ bool str_from(Token token, char *str, size_t strlen) {
         case RCURLY:
             snprintf(str, strlen,"}");
             return true;
+        case QUESTION:
+            snprintf(str, strlen,"?");
+            return true;
+        case COLON:
+            snprintf(str, strlen,":");
+            return true;
         case SEMICOLON:
             snprintf(str, strlen,";");
             return true;
@@ -299,8 +323,11 @@ bool str_from(Token token, char *str, size_t strlen) {
         case LOGIC_OR:
             snprintf(str, strlen,"||");
             return true;
+        case EQUALEQUAL:
+            snprintf(str, strlen, "==");
+            return true;
         default:
-            fprintf(stderr,"Unhandled token type in token from_str; enum %d\n", token.type);
+            fprintf(stderr,"Unhandled token type in token str_from; enum %d\n", token.type);
             return false;
     }
 }
