@@ -79,7 +79,7 @@ int get_keyword_i(char *string) {
 }
 
 bool is_digit_delim(char c) {
-    return (c==')' || c==',' || c==';' || c=='}' || c=='?' || c==':' || c=='&' || c=='|' || c=='=');
+    return (c==')' || c==',' || c==';' || c=='}' || c=='?' || c==':' || c=='&' || c=='|' || c=='=' || c=='<' || c=='>' || c=='!');
 }
 
 bool tokenize(Tokens *output){
@@ -174,6 +174,15 @@ bool tokenize(Tokens *output){
                 case ',':
                     token.type=COMMA;
                     break;
+                case '!':
+                    token.type=BANG;
+                    if (look_ahead_char()=='=') {
+                        token.type=NEQ;
+                        advance_char();
+                        break;
+                    }
+                    token.type=BANG;
+                    break;
                 case '=':
                     if (look_ahead_char()=='=') {
                         token.type=EQUALEQUAL;
@@ -182,6 +191,22 @@ bool tokenize(Tokens *output){
                     }
                     token.type=EQUAL;
                     break;
+                 case '>':
+                    if (look_ahead_char()=='=') {
+                        token.type=GTEQUAL;
+                        advance_char();
+                        break;
+                    }
+                    token.type=GT;
+                    break;
+                case '<':
+                    if (look_ahead_char()=='=') {
+                        token.type=LTEQUAL;
+                        advance_char();
+                        break;
+                    }
+                    token.type=LT;
+                    break;                                       
                 case ';':
                     token.type=SEMICOLON;
                     break;
@@ -325,6 +350,24 @@ bool str_from(Token token, char *str, size_t strlen) {
             return true;
         case EQUALEQUAL:
             snprintf(str, strlen, "==");
+            return true;
+        case GTEQUAL:
+            snprintf(str, strlen, ">=");
+            return true;
+        case LTEQUAL:
+            snprintf(str, strlen, "<=");
+            return true;
+        case LT:
+            snprintf(str, strlen, "<");
+            return true;
+        case GT:
+            snprintf(str, strlen, ">");
+            return true;
+        case NEQ:
+            snprintf(str, strlen, "!=");
+            return true;
+        case BANG:
+            snprintf(str, strlen, "!");
             return true;
         default:
             fprintf(stderr,"Unhandled token type in token str_from; enum %d\n", token.type);

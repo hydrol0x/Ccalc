@@ -420,7 +420,7 @@ ExpressionResult comparison() {
     ExpressionResult res = term();
     if (res.error != SUCCESS) return res;
 
-    while (match(EQUALEQUAL)) {
+    while (match(LT) || match(GT) || match(GTEQUAL) || match(LTEQUAL)) {
         Token op = previous();
         ExpressionResult right = term();
         if (right.error != SUCCESS) {
@@ -434,13 +434,31 @@ ExpressionResult comparison() {
     return res;
 }
 
-ExpressionResult and() {
+ExpressionResult equality() {
     ExpressionResult res = comparison();
+    if (res.error != SUCCESS) return res;
+
+    while (match(EQUALEQUAL) || match(NEQ)) {
+        Token op = previous();
+        ExpressionResult right = comparison();
+        if (right.error != SUCCESS) {
+            free_expression(res.expr); 
+            return right;
+        }
+
+        res = create_binary_expr(res.expr, op, right.expr);
+    }
+
+    return res;
+}
+
+ExpressionResult and() {
+    ExpressionResult res = equality();
     if (res.error != SUCCESS) return res;
 
     while (match(LOGIC_AND)) {
         Token op = previous();
-        ExpressionResult right = comparison();
+        ExpressionResult right = equality();
         if (right.error != SUCCESS) {
             free_expression(res.expr); 
             return right;

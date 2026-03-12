@@ -97,6 +97,21 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
                 case EQUALEQUAL:
                     out = lhs == rhs;
                     break;
+                case GT:
+                    out = lhs > rhs;
+                    break;
+                case LT:
+                    out = lhs < rhs;
+                    break;
+                case LTEQUAL:
+                    out = lhs <= rhs;
+                    break;
+                case GTEQUAL:
+                    out = lhs >= rhs;
+                    break;
+                case NEQ:
+                    out = lhs != rhs;
+                    break;
                 default: ;
                     char opstr[3]="";
                     str_from(expr->as.binaryexpr.operator, opstr, 3);
@@ -110,6 +125,9 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
             switch (expr->as.unaryexpr.operator.type) {
                 case MINUS:
                     out = -right;
+                    break;
+                case BANG:
+                    out = !right;
                     break;
                 default:
                     fprintf(stderr, "Not a valid unary operator.");

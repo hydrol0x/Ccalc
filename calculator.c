@@ -20,7 +20,7 @@ int main() {
 
             printf("Token stream: ");
             for (int i=0; i<tokens.count; i++) {
-                print_token(tokens.items[i]);
+                printf("'"); print_token(tokens.items[i]); printf("'");
                 printf(", ");
             }
             printf("\n");

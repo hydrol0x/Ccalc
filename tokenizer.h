@@ -54,6 +54,11 @@ typedef enum {
     LOGIC_OR,
     BANG,
     EQUALEQUAL,
+    LTEQUAL,
+    GTEQUAL,
+    LT,
+    NEQ,
+    GT,
 } TokenType;
 
 typedef struct {
