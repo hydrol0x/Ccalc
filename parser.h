@@ -23,7 +23,6 @@ typedef enum {
     TERNARY_EXPR
 } ExpressionType;
 
-/* Forward declarations */
 typedef struct Expression Expression;
 
 typedef struct {
@@ -99,12 +98,12 @@ typedef struct {
     Expression *expr;
 } ExpressionResult;
 
-/* Memory Management */
+ExpressionResult parse();
+
 void free_expression(Expression *expr);
 Token copy_token(Token t);
 Expression* copy_expression(Expression *expr);
 
-/* Initializers */
 ExpressionResult create_ternary_expr(Expression* condition, Expression* if_true, Expression *if_false);
 ExpressionResult create_paren_expr(Expression* middle);
 ExpressionResult create_binary_expr(Expression* left, Token op, Expression *right);

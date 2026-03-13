@@ -81,6 +81,8 @@ extern Tokens tokens;
 extern program p;
 extern const char keywords[];
 
+bool tokenize(Tokens *output);
+
 void free_tokens(Tokens *ts);
 void reset_program(program *prog, char *input);
 bool str_from(Token token, char *str, size_t strlen);

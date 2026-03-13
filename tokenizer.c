@@ -41,11 +41,6 @@ char look_ahead_char() {
     return p.string[p.pos+1];
 }
 
-static char consume() {
-    if (eof()) return '\0';
-    return p.string[p.pos++];
-}
-
 static void advance() {
     if (eof()) return;
     p.pos++;
@@ -85,18 +80,18 @@ bool is_digit_delim(char c) {
 bool tokenize(Tokens *output){
     _Static_assert(N_TOKEN_TYPE==17, "Unhandled Tokens in tokenize()");
     char current;
-    while ((current = peek_char())) {
+    while ((current = peek())) {
         if (isspace(current)) {
-            advance_char();
+            advance();
             continue;
         } 
         else if (isdigit(current)) {
             char digit_c;
             String number = {0};
-            while (!isspace(digit_c=peek_char())) {
+            while (!isspace(digit_c=peek())) {
                 if (isdigit(digit_c)) {
                     vec_append(number, digit_c);
-                    advance_char();
+                    advance();
                     continue;
                 } else if (is_op(digit_c) || is_digit_delim(digit_c) || digit_c=='.') {
                     break;
@@ -105,13 +100,13 @@ bool tokenize(Tokens *output){
                     return false;
                 }
             }
-            if (peek_char() == '.') {
+            if (peek() == '.') {
                 vec_append(number,'.');
-                advance_char();
-                while (!isspace(digit_c=peek_char())) {
+                advance();
+                while (!isspace(digit_c=peek())) {
                     if (isdigit(digit_c)) {
                         vec_append(number, digit_c);
-                        advance_char();
+                        advance();
                         continue;
                     } else if (is_op(digit_c) || is_digit_delim(digit_c)) { 
                         break;
@@ -132,9 +127,9 @@ bool tokenize(Tokens *output){
             char id_c; 
             String identifier = {0};
             int i = 0;
-            while ((isalnum(id_c=peek_char())) && i<sizeof(identifier)-1) {
+            while ((isalnum(id_c=peek())) && i<sizeof(identifier)-1) {
                 vec_append(identifier, id_c);    
-                advance_char();
+                advance();
             }
             vec_append(identifier, '\0');
 
@@ -178,7 +173,7 @@ bool tokenize(Tokens *output){
                     token.type=BANG;
                     if (look_ahead_char()=='=') {
                         token.type=NEQ;
-                        advance_char();
+                        advance();
                         break;
                     }
                     token.type=BANG;
@@ -186,7 +181,7 @@ bool tokenize(Tokens *output){
                 case '=':
                     if (look_ahead_char()=='=') {
                         token.type=EQUALEQUAL;
-                        advance_char();
+                        advance();
                         break;
                     }
                     token.type=EQUAL;
@@ -194,7 +189,7 @@ bool tokenize(Tokens *output){
                  case '>':
                     if (look_ahead_char()=='=') {
                         token.type=GTEQUAL;
-                        advance_char();
+                        advance();
                         break;
                     }
                     token.type=GT;
@@ -202,7 +197,7 @@ bool tokenize(Tokens *output){
                 case '<':
                     if (look_ahead_char()=='=') {
                         token.type=LTEQUAL;
-                        advance_char();
+                        advance();
                         break;
                     }
                     token.type=LT;
@@ -225,7 +220,7 @@ bool tokenize(Tokens *output){
                 case '&':
                     if (look_ahead_char()=='&') {
                         // Logical and uses & as op type
-                        advance_char();
+                        advance();
                         token.type=LOGIC_AND;
                         break;
                     }
@@ -236,7 +231,7 @@ bool tokenize(Tokens *output){
                  case '|':
                     if (look_ahead_char()=='|') {
                         // Logical or uses | as op type
-                        advance_char();
+                        advance();
                         token.type=LOGIC_OR;
                         break;
                     }
@@ -249,11 +244,11 @@ bool tokenize(Tokens *output){
                     String number = {0};
                     char digit_c;
                     vec_append(number,'.');
-                    advance_char();
-                    while (!isspace(digit_c=peek_char())) {
+                    advance();
+                    while (!isspace(digit_c=peek())) {
                         if (isdigit(digit_c)) {
                             vec_append(number, digit_c);
-                            advance_char();
+                            advance();
                             continue;
                         } else if (is_op(digit_c) || digit_c==')' || digit_c==',' || digit_c==';') {
                             break;
@@ -280,7 +275,7 @@ bool tokenize(Tokens *output){
             token.as.op=current;
             vec_append((*output), token);
         }
-        advance_char();
+        advance();
     }
     Token end;
     end.type = ENDSTREAM;
