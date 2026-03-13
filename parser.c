@@ -168,25 +168,25 @@ ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_
     return (ExpressionResult){SUCCESS, expr};
 }
 
-Token peek_tokens() {
+static Token peek() {
     return tokens.items[tokens.pos];    
 }
 
 bool end_of_tokens() {
-    return peek_tokens().type == ENDSTREAM;
+    return peek().type == ENDSTREAM;
 }
 
-Token advance_tokens() {
+Token advance() {
     return tokens.items[tokens.pos++];
 }
 
 bool check(TokenType type) {
-    return peek_tokens().type == type;
+    return peek().type == type;
 }
 
 bool match(TokenType type) {
     if (check(type)) {
-        advance_tokens();
+        advance();
         return true;
     }
     return false;
@@ -205,9 +205,9 @@ void error(Token token, char *message) {
     printf("%s\n", message);    
 }
 
-bool consume_token(TokenType type, char *message) {
-    if (check(type)) {advance_tokens(); return true;};
-    error(peek_tokens(), message);
+static bool consume(TokenType type, char *message) {
+    if (check(type)) {advance(); return true;};
+    error(peek(), message);
     return false;
 }
 
@@ -291,6 +291,9 @@ Expression* copy_expression(Expression *expr) {
     return new_expr;
 }
 
+// Recursive Descenent 
+ExpressionResult expr();
+
 ExpressionResult primary() {
     if (match(NUMBER)) {
         ExpressionResult res = create_literal_expr(previous());
@@ -299,15 +302,15 @@ ExpressionResult primary() {
 
     if (match(LPAREN)) {
         ExpressionResult res = expr();
-        if (!consume_token(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
 
         return res;
     }
 
     if (match(FN)) {
-        if (!consume_token(IDENTIFIER, "Expected function name after 'fn' keyword")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(IDENTIFIER, "Expected function name after 'fn' keyword")) return (ExpressionResult){PARSE_ERR, NULL};
         Token identifier = previous();
-        if (!consume_token(LPAREN, "Expected '(' after function identifier in fn declaration")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(LPAREN, "Expected '(' after function identifier in fn declaration")) return (ExpressionResult){PARSE_ERR, NULL};
 
         Tokens *arg_ids = malloc(sizeof(Tokens));
         *arg_ids = (Tokens){0};
@@ -316,21 +319,21 @@ ExpressionResult primary() {
 
         if (match(IDENTIFIER)) vec_append((*arg_ids), previous()); 
         while (match(COMMA)){
-            if (!consume_token(IDENTIFIER, "Expected argument in function declaration")) return (ExpressionResult){PARSE_ERR, NULL};
+            if (!consume(IDENTIFIER, "Expected argument in function declaration")) return (ExpressionResult){PARSE_ERR, NULL};
             vec_append((*arg_ids), previous()); 
         };
 
 
-        if (!consume_token(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
 
-        if (!consume_token(LCURLY, "Expect '{' to open function definition body'")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(LCURLY, "Expect '{' to open function definition body'")) return (ExpressionResult){PARSE_ERR, NULL};
         do {
             ExpressionResult res = expr();
             if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
             vec_append((*body), res.expr);
         } while (match(SEMICOLON));
 
-        if (!consume_token(RCURLY, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+        if (!consume(RCURLY, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
         return create_fn_expr(identifier, arg_ids, body);
     }
 
@@ -350,7 +353,7 @@ ExpressionResult primary() {
                 vec_append(args, res.expr); 
             } while (match(COMMA));
 
-            if (!consume_token(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
+            if (!consume(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
 
             return create_call_expr(identifier, args.items, args.count);
         } else if (match(EQUAL)) {
@@ -363,7 +366,7 @@ ExpressionResult primary() {
         }
     }
 
-    error(peek_tokens(),"Expected expression.");
+    error(peek(),"Expected expression.");
     return (ExpressionResult){PARSE_ERR, NULL};
 }
 
@@ -501,7 +504,7 @@ ExpressionResult ternary() {
             return if_true_res;
         }
 
-        consume_token(COLON, "Ternary '?' must have corresponding ':'");
+        consume(COLON, "Ternary '?' must have corresponding ':'");
 
         ExpressionResult if_false_res = term();
         if (if_false_res.error != SUCCESS) {
@@ -511,7 +514,7 @@ ExpressionResult ternary() {
 
         return create_ternary_expr(res.expr, if_true_res.expr, if_false_res.expr);
     } else if (match(COLON)) {
-        error(peek_tokens(), "Stray ':' found without a preceding '?'.");
+        error(peek(), "Stray ':' found without a preceding '?'.");
         free_expression(res.expr);
         return (ExpressionResult){PARSE_ERR, NULL};
     }
@@ -528,13 +531,13 @@ ExpressionResult parse() {
     if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
 
     if (match(RPAREN)) { 
-        error(peek_tokens(), "Unmatched ')'");
+        error(peek(), "Unmatched ')'");
         return (ExpressionResult){PARSE_ERR, NULL};
     } else if (match(EQUAL)) {
-        error(peek_tokens(), "Assignment to invalid identifier");
+        error(peek(), "Assignment to invalid identifier");
         return (ExpressionResult){PARSE_ERR, NULL};
     }  else if (!match(ENDSTREAM)) {
-        error(peek_tokens(), "Unhandled tokens in parser");
+        error(peek(), "Unhandled tokens in parser");
         return (ExpressionResult){PARSE_ERR, NULL};
     }
 

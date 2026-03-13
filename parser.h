@@ -115,25 +115,6 @@ ExpressionResult create_var_expr(Token identifier);
 ExpressionResult create_fn_expr(Token identifier, Tokens *args, Expressions *body);
 ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_args);
 
-/* Tokenizer */
-Token peek_tokens();
-bool end_of_tokens();
-Token advance_tokens();
-bool check(TokenType type);
-bool match(TokenType type);
-Token previous();
-void error(Token token, char *message);
-bool consume_token(TokenType type, char *message);
-
-/* Parsing rules */
-ExpressionResult expr(); 
-ExpressionResult primary();
-ExpressionResult unary();
-ExpressionResult factor();
-ExpressionResult term();
-ExpressionResult ternary();
-ExpressionResult parse();
-
 bool AST_printer(Expression *expr, char *buf, size_t buf_size);
 
 #endif /* PARSER_H */

@@ -22,11 +22,6 @@ do {\
 } while(0)
 
 typedef struct {
-    const char* start;
-    int length;
-} Sv; 
-
-typedef struct {
     size_t count;
     size_t capacity;
     char   *items;    
@@ -82,23 +77,12 @@ typedef struct program {
     int pos;
 } program;
 
-/* Globals */
 extern Tokens tokens;
 extern program p;
 extern const char keywords[];
 
-/* Functions */
 void free_tokens(Tokens *ts);
 void reset_program(program *prog, char *input);
-bool eof();
-char peek_char();
-char consume_char();
-void advance_char();
-int ctod(char character);
-bool is_op(char c);
-int get_keyword_i(char *string);
-bool is_digit_delim(char c);
-bool tokenize(Tokens *output);
 bool str_from(Token token, char *str, size_t strlen);
 void print_token(Token token);
 void print_tokens(Tokens tokens);

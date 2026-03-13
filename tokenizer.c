@@ -31,7 +31,7 @@ bool eof() {
     return p.string[p.pos] == '\0';
 }
 
-char peek_char() {
+static char peek() {
     if (eof()) return '\0';
     return p.string[p.pos];
 }
@@ -41,12 +41,12 @@ char look_ahead_char() {
     return p.string[p.pos+1];
 }
 
-char consume_char() {
+static char consume() {
     if (eof()) return '\0';
     return p.string[p.pos++];
 }
 
-void advance_char() {
+static void advance() {
     if (eof()) return;
     p.pos++;
 }
