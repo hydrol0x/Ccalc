@@ -99,6 +99,7 @@ typedef struct {
 } ExpressionResult;
 
 ExpressionResult parse();
+void error(Token token, char *message);
 
 void free_expression(Expression *expr);
 Token copy_token(Token t);

@@ -5,8 +5,8 @@
 #include "interpreter.h"
 #include "tokenizer.h"
 
-struct hashmap *env_map = NULL; // declared global variables
-struct hashmap *fn_map = NULL; //  declared global fns 
+struct hashmap *env_map = NULL; 
+struct hashmap *fn_map = NULL; 
 
 uint64_t var_hash(const void *item, uint64_t seed0, uint64_t seed1) {
     const struct var_entry *entry = item;
@@ -141,6 +141,8 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
             Expression **args = expr->as.callexpr.args;    
             size_t n_args = expr->as.callexpr.n_args;
             char *identifier = expr->as.callexpr.identifier.as.string;
+
+            // builtins
             if (strcmp("sin", identifier) == 0) {
                 if (n_args != 1) {
                     error(expr->as.callexpr.identifier, "sin(x) takes one argument.");
@@ -150,6 +152,20 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
                 EvalResult args_res = eval(args[0]);
                 if (!args_res.status) return MAKE_ERROR();
                 return (EvalResult){true, sin(args_res.result)};
+            }
+            if (strcmp("sqrt", identifier) == 0) {
+                if (n_args != 1) {
+                    error(expr->as.callexpr.identifier, "sqrt(x) takes one argument.");
+                    return MAKE_ERROR();
+                };
+
+                EvalResult args_res = eval(args[0]);
+                if (!args_res.status) return MAKE_ERROR();
+                if (args_res.result < 0) {
+                    error(expr->as.callexpr.identifier, "Illegal negative argument to sqrt.");
+                    return MAKE_ERROR();
+                }
+                return (EvalResult){true, sqrt(args_res.result)};
             }
             
             // user defn function

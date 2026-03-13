@@ -193,7 +193,7 @@ bool match(TokenType type) {
 }
 
 Token previous() {
-    if (tokens.pos==0) {fprintf(stderr,"Error: previous() should never be called when pos is 0"); exit(1);};
+    if (tokens.pos==0) return tokens.items[tokens.pos];
     return tokens.items[tokens.pos-1];
 }
 
@@ -207,7 +207,7 @@ void error(Token token, char *message) {
 
 static bool consume(TokenType type, char *message) {
     if (check(type)) {advance(); return true;};
-    error(peek(), message);
+    error(previous(), message);
     return false;
 }
 
@@ -366,7 +366,7 @@ ExpressionResult primary() {
         }
     }
 
-    error(peek(),"Expected expression.");
+    error(previous(),"Expected expression.");
     return (ExpressionResult){PARSE_ERR, NULL};
 }
 
@@ -514,7 +514,7 @@ ExpressionResult ternary() {
 
         return create_ternary_expr(res.expr, if_true_res.expr, if_false_res.expr);
     } else if (match(COLON)) {
-        error(peek(), "Stray ':' found without a preceding '?'.");
+        error(previous(), "Stray ':' found without a preceding '?'.");
         free_expression(res.expr);
         return (ExpressionResult){PARSE_ERR, NULL};
     }
@@ -531,13 +531,13 @@ ExpressionResult parse() {
     if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
 
     if (match(RPAREN)) { 
-        error(peek(), "Unmatched ')'");
+        error(previous(), "Unmatched ')'");
         return (ExpressionResult){PARSE_ERR, NULL};
     } else if (match(EQUAL)) {
-        error(peek(), "Assignment to invalid identifier");
+        error(previous(), "Assignment to invalid identifier");
         return (ExpressionResult){PARSE_ERR, NULL};
     }  else if (!match(ENDSTREAM)) {
-        error(peek(), "Unhandled tokens in parser");
+        error(previous(), "Unhandled tokens in parser");
         return (ExpressionResult){PARSE_ERR, NULL};
     }
 
