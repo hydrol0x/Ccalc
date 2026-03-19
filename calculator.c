@@ -1,11 +1,31 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "grapher.h"
 #include "tokenizer.h"
 #include "parser.h"
 #include "interpreter.h"
 #include "hashmap.h"
+#include <string.h>
 
+//Graph g = {0};
+typedef struct {
+    char **items;
+    size_t count;
+    size_t capacity;
+} Lines;
+Lines history = {0};
+
+double f(double x) { return x; } 
 int main() {
+    Graph *g = new_graph_p(5,5,25,20);
+    Sb *buf=&(Sb){0};
+    if (init(buf, g)<0) exit(1);
+    axes(buf, g);
+    graph_precise(buf, f, g);
+    reset_pos(buf, g);
+    draw(buf);
+    restore_term(g);
+    
     char line[256];
     env_map=hashmap_new(sizeof(struct var_entry), 0, 0, 0,var_hash, var_compare, var_free, NULL);
     fn_map=hashmap_new(sizeof(struct fn_entry), 0, 0, 0,fn_hash, fn_compare, fn_free, NULL);
@@ -64,6 +84,9 @@ int main() {
                 case PARSE_ERR:
                     continue;
             }
+            char *curr_line = strdup(line);
+            vec_append(history, curr_line);
+ //           printf("hist: %s\n", history.items[history.count-1]);
         }
     }
     hashmap_free(env_map);

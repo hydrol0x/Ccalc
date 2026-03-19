@@ -6,7 +6,7 @@
 
 Tokens tokens = {0};
 program p;
-const char keywords[] = {"fn"};
+const char *keywords[] = {"fn", "graph"};
 
 void free_tokens(Tokens *ts) {
     if (ts->items != NULL) {
@@ -66,7 +66,7 @@ bool is_op(char c) {
 int get_keyword_i(char *string) {
     // returns keyword index
     for (int i=0; i<sizeof(keywords); i++) {
-        if (strcmp(&keywords[i], string)==0) {
+        if (strcmp(keywords[i], string)==0) {
             return i;
         };
     }
@@ -134,8 +134,11 @@ bool tokenize(Tokens *output){
             vec_append(identifier, '\0');
 
             Token token;
-            if (strcmp(identifier.items, "fn") == 0) {
+            if (strcmp(identifier.items, "fn") == 0) { 
                 token.type = FN;
+                token.as.string = identifier.items;
+            } else if (strcmp(identifier.items, "graph") == 0) {
+                token.type = GRAPH;
                 token.as.string = identifier.items;
             } else {
                 token.type = IDENTIFIER;
@@ -363,6 +366,9 @@ bool str_from(Token token, char *str, size_t strlen) {
             return true;
         case BANG:
             snprintf(str, strlen, "!");
+            return true;
+        case GRAPH:
+            snprintf(str, strlen, "Graph");
             return true;
         default:
             fprintf(stderr,"Unhandled token type in token str_from; enum %d\n", token.type);

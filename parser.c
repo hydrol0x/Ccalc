@@ -1,10 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "parser.h"
 #include "tokenizer.h"
 
-void free_expression(Expression *expr) {
+void free_expression(Expression *expr) { //TODO: use arena allocation instead
     if (expr == NULL) return;
 
     switch (expr->type) {
@@ -43,6 +44,8 @@ void free_expression(Expression *expr) {
             break;
         case FN_EXPR:
             break;  // TODO: write free fn
+        case GRAPH_EXPR:
+            break; //TODO: write 
         default:
             printf("Unhandled enum in free_expression\n");
             break;
@@ -50,10 +53,13 @@ void free_expression(Expression *expr) {
     free(expr);
 }
 
+#define CREATE_ERROR (ExpressionResult){CREATE_EXPR_ERR, NULL}
+#define PARSE_ERROR (ExpressionResult){PARSE_ERR, NULL}
+#define CREATE_SUCCESS(expr) (ExpressionResult){SUCCESS, expr}
 ExpressionResult create_ternary_expr(Expression* condition, Expression* if_true, Expression *if_false) {
     Expression *expr = malloc(sizeof(Expression));
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=TERNARY_EXPR;
@@ -61,111 +67,120 @@ ExpressionResult create_ternary_expr(Expression* condition, Expression* if_true,
     expr->as.ternary.if_false = if_false ;
     expr->as.ternary.if_true= if_true;
 
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_paren_expr(Expression* middle) {
     Expression *expr = malloc(sizeof(Expression));
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=PAREN_EXPR;
     expr->as.parenexpr.expr = middle;
 
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_binary_expr(Expression* left, Token op, Expression *right) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=BINARY_EXPR;
     expr->as.binaryexpr.left=left;
     expr->as.binaryexpr.right=right;
     expr->as.binaryexpr.operator=op;
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_literal_expr(Token value) {
     Expression *expr = malloc(sizeof(Expression));
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type = LITERAL_EXPR;
     expr->as.literalexpr.value = value;
 
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_unary_expr(Token op,Expression* right) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=UNARY_EXPR;
     expr->as.unaryexpr.right=right;
     expr->as.unaryexpr.operator=op;
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_assign_expr(Token identifier, Expression *r_value) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=ASSIGN_EXPR;
     expr->as.assignment.identifier=identifier;
     expr->as.assignment.r_value=r_value;
-    return (ExpressionResult){SUCCESS,expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_var_expr(Token identifier) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=VAR_EXPR;
     expr->as.variable.identifier=identifier;
-    return (ExpressionResult){SUCCESS,expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_fn_expr(Token identifier, Tokens *args, Expressions *body) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=FN_EXPR;
     expr->as.function.identifier=identifier;
     expr->as.function.args=args; 
     expr->as.function.body=body;
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
 }
 
 ExpressionResult create_call_expr(Token identifier, Expression **args, size_t n_args) {
     Expression *expr = malloc(sizeof(Expression));
 
     if (expr == NULL) {
-        return (ExpressionResult){CREATE_EXPR_ERR, NULL};
+        return CREATE_ERROR;
     }
 
     expr->type=CALL_EXPR;
     expr->as.callexpr.args=args; 
     expr->as.callexpr.n_args=n_args;
     expr->as.callexpr.identifier=identifier;
-    return (ExpressionResult){SUCCESS, expr};
+    return CREATE_SUCCESS(expr);
+}
+
+ExpressionResult create_graph_expr(CallExpr function) {
+    Expression *expr = malloc(sizeof(Expression));
+    if (expr==NULL) return CREATE_ERROR; 
+
+    expr->type=GRAPH_EXPR;
+    expr->as.graph.fn_call = function;
+    return CREATE_SUCCESS(expr);
 }
 
 static Token peek() {
@@ -219,6 +234,42 @@ Token copy_token(Token t) {
     return new_t;
 }
 
+static FnExpr copy_fn(FnExpr src) {
+    FnExpr dst;
+    dst.identifier = copy_token(src.identifier);
+    
+    dst.args = malloc(sizeof(Tokens));
+    dst.args->count = src.args->count;
+    dst.args->capacity = src.args->capacity;
+    dst.args->pos = 0;
+    dst.args->items = malloc(sizeof(Token) * src.args->capacity);
+    for (size_t i = 0; i < src.args->count; i++) {
+        dst.args->items[i] = copy_token(src.args->items[i]);
+    }
+
+    dst.body = malloc(sizeof(Expressions));
+    dst.body->count = src.body->count;
+    dst.body->capacity = src.body->capacity;
+    dst.body->pos = 0;
+    dst.body->items = malloc(sizeof(Expression*) * src.body->capacity);
+    for (size_t i = 0; i < src.body->count; i++) {
+        dst.body->items[i] = copy_expression(src.body->items[i]);
+    }
+    
+    return dst;
+}
+
+static CallExpr copy_call(CallExpr src) {
+    CallExpr dst;
+    dst.identifier = copy_token(src.identifier);
+    dst.n_args = src.n_args;
+    dst.args = malloc(sizeof(Expression*) * src.n_args);
+    for (size_t i = 0; i < src.n_args; i++) {
+        dst.args[i] = copy_expression(src.args[i]);
+    }
+    return dst;
+}
+
 Expression* copy_expression(Expression *expr) {
     if (expr == NULL) return NULL;
 
@@ -254,38 +305,18 @@ Expression* copy_expression(Expression *expr) {
             new_expr->as.assignment.r_value = copy_expression(expr->as.assignment.r_value);
             break;
         case CALL_EXPR:
-            new_expr->as.callexpr.identifier = copy_token(expr->as.callexpr.identifier);
-            new_expr->as.callexpr.n_args = expr->as.callexpr.n_args;
-            new_expr->as.callexpr.args = malloc(sizeof(Expression*) * expr->as.callexpr.n_args);
-            for (size_t i = 0; i < expr->as.callexpr.n_args; i++) {
-                new_expr->as.callexpr.args[i] = copy_expression(expr->as.callexpr.args[i]);
-            }
+            new_expr->as.callexpr = copy_call(expr->as.callexpr);
             break;
         case TERNARY_EXPR:
             new_expr->as.ternary.condition = copy_expression(expr->as.ternary.condition);
             new_expr->as.ternary.if_true= copy_expression(expr->as.ternary.if_true);
             new_expr->as.ternary.if_false= copy_expression(expr->as.ternary.if_false);
             break;
+        case GRAPH_EXPR:
+            new_expr->as.graph.fn_call = copy_call(expr->as.graph.fn_call);
+            break;
         case FN_EXPR:
-            new_expr->as.function.identifier = copy_token(expr->as.function.identifier);
-            
-            new_expr->as.function.args = malloc(sizeof(Tokens));
-            new_expr->as.function.args->count = expr->as.function.args->count;
-            new_expr->as.function.args->capacity = expr->as.function.args->capacity;
-            new_expr->as.function.args->pos = 0;
-            new_expr->as.function.args->items = malloc(sizeof(Token) * expr->as.function.args->capacity);
-            for (size_t i = 0; i < expr->as.function.args->count; i++) {
-                new_expr->as.function.args->items[i] = copy_token(expr->as.function.args->items[i]);
-            }
-
-            new_expr->as.function.body = malloc(sizeof(Expressions));
-            new_expr->as.function.body->count = expr->as.function.body->count;
-            new_expr->as.function.body->capacity = expr->as.function.body->capacity;
-            new_expr->as.function.body->pos = 0;
-            new_expr->as.function.body->items = malloc(sizeof(Expression*) * expr->as.function.body->capacity);
-            for (size_t i = 0; i < expr->as.function.body->count; i++) {
-                new_expr->as.function.body->items[i] = copy_expression(expr->as.function.body->items[i]);
-            }
+            new_expr->as.function = copy_fn(expr->as.function);
             break;
     }
     return new_expr;
@@ -293,6 +324,54 @@ Expression* copy_expression(Expression *expr) {
 
 // Recursive Descenent 
 ExpressionResult expr();
+
+ExpressionResult parse_function() {
+    if (!consume(IDENTIFIER, "Expected function name after 'fn' keyword")) return (ExpressionResult){PARSE_ERR, NULL};
+    Token identifier = previous();
+    if (!consume(LPAREN, "Expected '(' after function identifier in fn declaration")) return (ExpressionResult){PARSE_ERR, NULL};
+
+    Tokens *arg_ids = malloc(sizeof(Tokens));
+    *arg_ids = (Tokens){0};
+    Expressions *body = malloc(sizeof(Expressions));
+    *body = (Expressions){0};
+
+    if (match(IDENTIFIER)) vec_append((*arg_ids), previous()); 
+    while (match(COMMA)){
+        if (!consume(IDENTIFIER, "Expected argument in function declaration")) return (ExpressionResult){PARSE_ERR, NULL};
+        vec_append((*arg_ids), previous()); 
+    };
+
+
+    if (!consume(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+
+    if (!consume(LCURLY, "Expect '{' to open function definition body'")) return (ExpressionResult){PARSE_ERR, NULL};
+    do {
+        ExpressionResult res = expr();
+        if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
+        vec_append((*body), res.expr);
+    } while (match(SEMICOLON));
+
+    if (!consume(RCURLY, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
+    return create_fn_expr(identifier, arg_ids, body);
+}
+
+ExpressionResult parse_call(Token identifier) {
+    if (match(RPAREN)) {
+        // empty function args
+        return create_call_expr(identifier, NULL, 0);
+    }
+
+    Expressions args = {0};
+    do {
+        ExpressionResult res = expr();
+        if (res.error!=SUCCESS) return res; // if one of the args fails then we stop parsing
+        vec_append(args, res.expr); 
+    } while (match(COMMA));
+
+    if (!consume(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
+
+    return create_call_expr(identifier, args.items, args.count);
+}
 
 ExpressionResult primary() {
     if (match(NUMBER)) {
@@ -307,55 +386,25 @@ ExpressionResult primary() {
         return res;
     }
 
+    if (match(GRAPH)) {
+        consume(IDENTIFIER, "Expected function call to follow `graph` keyword.");
+        Token ident = previous();
+        if (!consume(LPAREN, "Expected `(` after function identifier.")) return PARSE_ERROR;
+        ExpressionResult res = parse_call(ident); 
+        if (res.error!=SUCCESS) return res;
+
+        return create_graph_expr(res.expr->as.callexpr);
+    }
+
     if (match(FN)) {
-        if (!consume(IDENTIFIER, "Expected function name after 'fn' keyword")) return (ExpressionResult){PARSE_ERR, NULL};
-        Token identifier = previous();
-        if (!consume(LPAREN, "Expected '(' after function identifier in fn declaration")) return (ExpressionResult){PARSE_ERR, NULL};
-
-        Tokens *arg_ids = malloc(sizeof(Tokens));
-        *arg_ids = (Tokens){0};
-        Expressions *body = malloc(sizeof(Expressions));
-        *body = (Expressions){0};
-
-        if (match(IDENTIFIER)) vec_append((*arg_ids), previous()); 
-        while (match(COMMA)){
-            if (!consume(IDENTIFIER, "Expected argument in function declaration")) return (ExpressionResult){PARSE_ERR, NULL};
-            vec_append((*arg_ids), previous()); 
-        };
-
-
-        if (!consume(RPAREN, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
-
-        if (!consume(LCURLY, "Expect '{' to open function definition body'")) return (ExpressionResult){PARSE_ERR, NULL};
-        do {
-            ExpressionResult res = expr();
-            if (res.error!=SUCCESS) return (ExpressionResult){PARSE_ERR, NULL};
-            vec_append((*body), res.expr);
-        } while (match(SEMICOLON));
-
-        if (!consume(RCURLY, "Expect closing ')'.")) return (ExpressionResult){PARSE_ERR, NULL};
-        return create_fn_expr(identifier, arg_ids, body);
+        return parse_function();
     }
 
     if (match(IDENTIFIER)) {
         Token identifier = previous();
         if (match(LPAREN)) {
             //      function call
-            if (match(RPAREN)) {
-                // empty function args
-                return create_call_expr(identifier, NULL, 0);
-            }
-
-            Expressions args = {0};
-            do {
-                ExpressionResult res = expr();
-                if (res.error!=SUCCESS) return res; // if one of the args fails then we stop parsing
-                vec_append(args, res.expr); 
-            } while (match(COMMA));
-
-            if (!consume(RPAREN, "Expect closing ')' to close function call.")) return (ExpressionResult){PARSE_ERR,NULL};
-
-            return create_call_expr(identifier, args.items, args.count);
+            return parse_call(identifier);
         } else if (match(EQUAL)) {
             // assignment expr L_VAL = R_VAL, returns R_VAL
             ExpressionResult res = expr();
@@ -602,6 +651,9 @@ bool AST_printer(Expression *expr, char *buf, size_t buf_size) {
             return true;
         case FN_EXPR:
             snprintf(buf + strlen(buf),buf_size-strlen(buf),"Fn(%s)",expr->as.function.identifier.as.string);
+            return true;
+        case GRAPH_EXPR:
+            snprintf(buf + strlen(buf),buf_size-strlen(buf),"Graph()");
             return true;
         default:
             fprintf(stderr,"Unhandled token type in AST_printer; Enum: %d\n", expr->type);

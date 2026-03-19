@@ -54,6 +54,7 @@ typedef enum {
     LT,
     NEQ,
     GT,
+    GRAPH,
 } TokenType;
 
 typedef struct {
@@ -79,7 +80,6 @@ typedef struct program {
 
 extern Tokens tokens;
 extern program p;
-extern const char keywords[];
 
 bool tokenize(Tokens *output);
 

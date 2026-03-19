@@ -1,15 +1,15 @@
 CC      = gcc
-TARGET  = calculator
+TARGET  = calculator 
 C_FILES = $(wildcard *.c)
 OBJS    = $(patsubst %.c,%.o,$(C_FILES))
 CFLAGS  = -g -Wall -Werror -pedantic-errors -g
-LDFLAGS =-lm
-LDLIBS  =
+LDFLAGS =
+LDLIBS  =-lm 
 
 .PHONY: all clean
 all: $(TARGET)
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $@ $(LDLIBS) $(LDFLAGS) 
+	$(CC) $(OBJS) $(LDFLAGS) -o $@ $(LDLIBS) 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 %.o: %.c

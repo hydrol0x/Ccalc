@@ -20,7 +20,8 @@ typedef enum {
     VAR_EXPR,
     ASSIGN_EXPR,
     FN_EXPR,
-    TERNARY_EXPR
+    TERNARY_EXPR,
+    GRAPH_EXPR,
 } ExpressionType;
 
 typedef struct Expression Expression;
@@ -78,6 +79,10 @@ typedef struct {
     Token identifier;
 } VarExpr;
 
+typedef struct {
+    CallExpr fn_call;
+} GraphExpr;
+
 struct Expression {
     ExpressionType type;
     union {
@@ -90,6 +95,7 @@ struct Expression {
         AssignExpr assignment;
         TernaryExpr ternary;
         VarExpr variable;
+        GraphExpr graph;
     } as;
 };
 

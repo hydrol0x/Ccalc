@@ -3,7 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include "interpreter.h"
+#include "parser.h"
 #include "tokenizer.h"
+#include "grapher.h"
 
 struct hashmap *env_map = NULL; 
 struct hashmap *fn_map = NULL; 
@@ -59,6 +61,107 @@ void fn_free(void *item) {
 }
 
 #define eval(expr) eval_with_env((expr), environment);
+
+EvalResult eval_call(CallExpr *fn, struct hashmap *environment) {
+    Expression **args = fn->args;    
+    size_t n_args = fn->n_args;
+    char *identifier = fn->identifier.as.string;
+
+    // builtins
+    if (strcmp("sin", identifier) == 0) {
+        if (n_args != 1) {
+            error(fn->identifier, "sin(x) takes one argument.");
+            return MAKE_ERROR();
+        };
+
+        EvalResult args_res = eval(args[0]);
+        if (!args_res.status) return MAKE_ERROR();
+        return (EvalResult){true, sin(args_res.result)};
+    }
+    if (strcmp("sqrt", identifier) == 0) {
+        if (n_args != 1) {
+            error(fn->identifier, "sqrt(x) takes one argument.");
+            return MAKE_ERROR();
+        };
+
+        EvalResult args_res = eval(args[0]);
+        if (!args_res.status) return MAKE_ERROR();
+        if (args_res.result < 0) {
+            error(fn->identifier, "Illegal negative argument to sqrt.");
+            return MAKE_ERROR();
+        }
+        return (EvalResult){true, sqrt(args_res.result)};
+    }
+
+    // user defn function
+    struct fn_entry fnkey = { .identifier = identifier }; 
+    const struct fn_entry *found_fn = hashmap_get(fn_map, &fnkey);
+    if (!found_fn) {
+        error(fn->identifier, "undefined function");
+        return MAKE_ERROR();
+    }
+    Expression **fn_body = found_fn->value->body->items;
+    size_t num_exprs = found_fn->value->body->count;
+    Tokens *fn_args = found_fn->value->args;
+    size_t expected_n_args = fn_args->count;
+
+    if (n_args != expected_n_args) {
+        error(fn->identifier, "Wrong number of args to function call.");
+        return MAKE_ERROR();
+    };
+
+    struct hashmap *local_var_env = hashmap_new(sizeof(struct var_entry), 0, 0, 0,var_hash, var_compare, var_free, NULL);
+    for (int i=0; i<n_args; i++) {
+        EvalResult arg_res = eval(args[i]);
+        if (!arg_res.status) return arg_res;
+
+        struct var_entry entry = {
+            .identifier=strdup(fn_args->items[i].as.string),
+            .value=arg_res.result,
+        };
+        hashmap_set(local_var_env, &entry);
+    }
+
+    for (int i=0; i<num_exprs-1; i++) {
+        // loop over all but last expr
+        EvalResult res = eval_with_env(fn_body[i], local_var_env);
+        if (!res.status) {
+            error(fn->identifier, "Error in function body.");
+            return res;
+        }
+    }
+
+    Expression *return_expr = num_exprs>0 ? fn_body[num_exprs-1] : &Literal_Expr(0);
+    EvalResult return_val = eval_with_env(return_expr, local_var_env);
+    return return_val;
+}
+
+EvalResult graph_precise_calc_fn(Sb *buf, CallExpr *fn, struct hashmap *environment, Graph *g) {
+    GraphOptions o = g->opts;
+    double x_r = o.x_range;
+    double y=0;
+
+    // handle case where graphed fn has empty parentheses
+
+    Expression *local_args[1];
+    if (fn->args==NULL) {
+        fn->args=local_args;
+        fn->n_args=1;
+    }
+
+    for (double x=-x_r/2.0; x<x_r/2.0; x+=o.x_inc) {
+        Expression x_literal = Literal_Expr(x);
+        fn->args[0] = &x_literal; // inject current x val into fn arg
+        EvalResult y_res = eval_call(fn, environment);
+        if (!y_res.status) {
+            error(fn->identifier, "Error in graphing of function.");
+            return MAKE_ERROR();
+        }
+        y = y_res.result;
+        mark_at_precise(buf,x,y, g); 
+    }
+    return (EvalResult){.status=true, .result=y};
+}
 
 EvalResult eval_with_env(Expression *expr, struct hashmap *environment) { 
 // TODO: eval should take a fn_env too, for functions defined in a function theoretically
@@ -138,77 +241,7 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
         case LITERAL_EXPR:
             return (EvalResult){true,expr->as.literalexpr.value.as.number};    
         case CALL_EXPR: ;
-            Expression **args = expr->as.callexpr.args;    
-            size_t n_args = expr->as.callexpr.n_args;
-            char *identifier = expr->as.callexpr.identifier.as.string;
-
-            // builtins
-            if (strcmp("sin", identifier) == 0) {
-                if (n_args != 1) {
-                    error(expr->as.callexpr.identifier, "sin(x) takes one argument.");
-                    return MAKE_ERROR();
-                };
-
-                EvalResult args_res = eval(args[0]);
-                if (!args_res.status) return MAKE_ERROR();
-                return (EvalResult){true, sin(args_res.result)};
-            }
-            if (strcmp("sqrt", identifier) == 0) {
-                if (n_args != 1) {
-                    error(expr->as.callexpr.identifier, "sqrt(x) takes one argument.");
-                    return MAKE_ERROR();
-                };
-
-                EvalResult args_res = eval(args[0]);
-                if (!args_res.status) return MAKE_ERROR();
-                if (args_res.result < 0) {
-                    error(expr->as.callexpr.identifier, "Illegal negative argument to sqrt.");
-                    return MAKE_ERROR();
-                }
-                return (EvalResult){true, sqrt(args_res.result)};
-            }
-            
-            // user defn function
-            struct fn_entry fnkey = { .identifier = identifier }; 
-            const struct fn_entry *found_fn = hashmap_get(fn_map, &fnkey);
-            if (!found_fn) {
-                error(expr->as.function.identifier, "undefined function");
-                return MAKE_ERROR();
-            }
-            Expression **fn_body = found_fn->value->body->items;
-            size_t num_exprs = found_fn->value->body->count;
-            Tokens *fn_args = found_fn->value->args;
-            size_t expected_n_args = fn_args->count;
-
-            if (n_args != expected_n_args) {
-                error(expr->as.callexpr.identifier, "Wrong number of args to function call.");
-                return MAKE_ERROR();
-            };
-
-            struct hashmap *local_var_env = hashmap_new(sizeof(struct var_entry), 0, 0, 0,var_hash, var_compare, var_free, NULL);
-            for (int i=0; i<n_args; i++) {
-                EvalResult arg_res = eval(args[i]);
-                if (!arg_res.status) return arg_res;
-
-                struct var_entry entry = {
-                    .identifier=strdup(fn_args->items[i].as.string),
-                    .value=arg_res.result,
-                };
-                hashmap_set(local_var_env, &entry);
-            }
-
-            for (int i=0; i<num_exprs-1; i++) {
-                // loop over all but last expr
-                EvalResult res = eval_with_env(fn_body[i], local_var_env);
-                if (!res.status) {
-                    error(expr->as.callexpr.identifier, "Error in function body.");
-                    return res;
-                }
-            }
-
-            Expression *return_expr = num_exprs>0 ? fn_body[num_exprs-1] : &Literal_Expr(0);
-            EvalResult return_val = eval_with_env(return_expr, local_var_env);
-            return return_val;
+            return eval_call(&expr->as.callexpr, environment); 
         case TERNARY_EXPR: ;
             EvalResult condition_res = eval(expr->as.ternary.condition);
             if (!condition_res.status) return MAKE_ERROR();
@@ -243,6 +276,28 @@ EvalResult eval_with_env(Expression *expr, struct hashmap *environment) {
             };
             hashmap_set(fn_map, &fn_entry);
             return (EvalResult){true, 1}; // TODO: figure out what fn returns, should be return pointer to fn maybe, or the fn identifier
+        case GRAPH_EXPR: ;
+            struct fn_entry fnkey = { .identifier = expr->as.graph.fn_call.identifier.as.string }; 
+            const struct fn_entry *found_fn = hashmap_get(fn_map, &fnkey);
+            if (!found_fn) {
+                error(expr->as.graph.fn_call.identifier, "undefined function.");
+                return MAKE_ERROR();
+            }
+
+            if (found_fn->value->args->count != 1) {
+                error(expr->as.graph.fn_call.identifier, "Graphed fn must only take 1 argument.");
+                return MAKE_ERROR();
+            }
+            
+            Graph *g = new_graph_p(5,5,25,20);
+            Sb *buf=&(Sb){0};
+            if (init(buf, g)<0) exit(1);
+            axes(buf, g);
+            graph_precise_calc_fn(buf, &expr->as.graph.fn_call, environment, g);
+            reset_pos(buf, g);
+            draw(buf);
+            restore_term(g);
+            return (EvalResult){.status=true, .result=1};
         default:
             fprintf(stderr,"Unhandled token type in eval\n");
             return MAKE_ERROR();
