@@ -54,4 +54,3 @@ Last expression is implicitly returned
 
 Todo:
 - Units
-- Graphing? 
